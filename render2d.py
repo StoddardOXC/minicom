@@ -181,7 +181,7 @@ def drawsurf(renderer, surf, border, blend):
     sdl2.render.SDL_RenderPresent(renderer)
     sdl2.render.SDL_DestroyTexture(tex)
 
-def openwindow(size=(480, 320), title='xpz-wmc', icon=None, resizable = True): 
+def openwindow(size=(480, 320), title='minicom', icon=None, resizable = True):
     if resizable:
         flags = sdl2.video.SDL_WINDOW_OPENGL | sdl2.video.SDL_WINDOW_RESIZABLE
     else:
