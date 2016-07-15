@@ -138,7 +138,6 @@ def draw_textris(window, renderer, vtxlist, trilist, texmap, plist, poilist, cou
         if type(poi[1]) is str:
             draw_poi(poi, (0xff, 0xff, 0x00, 0xff), (0x60, 0xe0, 0x80, 0xff))
         else:
-            #continue
             draw_poi(poi, (0xff, 0x00, 0xff, 0xff), 1)
             draw_poi(poi, (0xff, 0x00, 0xff, 0xff), 2)
 

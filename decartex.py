@@ -610,10 +610,13 @@ def main():
     countrylabels = extract_clabels(ruleset, vtxlist, lonshift, trans)
     
     print(stat_x, stat_y, stat_lon, stat_lat)
-    #mzquads = []
 
     render2d.init()
     win, ren = render2d.openwindow((w, h))
+
+    poilist = filter(lambda poi: type(poi[1]) is str, poilist) # filter out enemy bases and stuff
+    mzquads = [] # don't render mission zones
+
     render2d.draw_textris(win, ren, vtxlist, trilist, textures, plist, poilist, countrylabels, mzquads)
     
     render2d.loop(win, ren)
