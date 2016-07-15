@@ -638,8 +638,20 @@ def load_vanilla(mod):
         { "type": "TAC00.SCR", "width": 320, "height": 200, "singleImage": True, "files": { 0: fi("UFOGRAPH/TAC00.SCR")}},
     ]
     
-    # mildly annoying lbms and palette stuff. skipped.
+    # mildly annoying lbm stuff skipped.
     
+    palettes = { }
+    offs = 0
+    offstep = 768+6
+    pfile = fi("GEODATA/PALETTES.DAT")
+    for p in  ( "PAL_GEOSCAPE", "PAL_BASESCAPE", "PAL_GRAPHS", "PAL_UFOPAEDIA", "PAL_BATTLEPEDIA"):
+        palettes[p] = { "file": pfile, "offs": offs, "size": 256*3 }
+        offs += offstep
+    palettes["BACKPALS.DAT"] = { "file": fi("GEODATA/BACKPALS.DAT"), "offs": 0, "size": 128*3 }
+
+    palettes["PAL_BATTLESCAPE"] = { "file": fi("GEODATA/PALETTES.DAT"), "offs": 4*offstep, "size": 256*3 }
+    # last 16 greyscale and fixup not implemented yet.
+
     # optional stuff, means, skip if not found (think that has to do with tftd)
     
     for fpath in """UFOGRAPH/TAC01.SCR
@@ -700,7 +712,7 @@ def load_vanilla(mod):
         lang = FALLBACK_LANG
         trans = yamload(fi(os.path.join('Language', lang + '.yml')))
    
-    return { 'extraSprites': surfaces, 'extraStrings': [{ 'type': lang, 'strings': trans[lang] }] }
+    return { 'extraSprites': surfaces, 'extraStrings': [{ 'type': lang, 'strings': trans[lang] }], '_palettes': palettes }
 
 def load(finder):
     config = yamload(finder.config)
