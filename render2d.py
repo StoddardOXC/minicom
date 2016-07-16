@@ -20,7 +20,6 @@ def fini():
     sdl2.sdlimage.IMG_Quit()
     sdl2.SDL_Quit()
 
-_bars = []
 def bufpal2surface(buf, w, h, pal):
     # and also buf might be shorter that w*h,
     # so pad it with transparency
@@ -33,7 +32,6 @@ def bufpal2surface(buf, w, h, pal):
             bar[4*x + pitch*y + 1] = pal[buf[x+y*w]][1] if x+y*w < len(buf) else 0
             bar[4*x + pitch*y + 2] = pal[buf[x+y*w]][2] if x+y*w < len(buf) else 0
             bar[4*x + pitch*y + 3] = pal[buf[x+y*w]][3] if x+y*w < len(buf) else 0
-    _bars.append(bar) # leak a ref
     return RGBAsurface(w, h, bar)
 
 def file2surface(fname):
@@ -64,6 +62,7 @@ def RGBAsurface(w, h, data = None):
     else:
         rv = sdl2.surface.SDL_CreateRGBSurface(0, w, h, bpp, rmask, gmask, bmask, amask)
     sdl2.SDL_SetSurfaceBlendMode(rv, sdl2.SDL_BLENDMODE_NONE)
+    rv._data_ref = data # keep a ref
     return rv
 
 def draw_textris(window, renderer, vtxlist, trilist, texmap, plist, poilist, countrylabels, mzquads):
@@ -71,7 +70,7 @@ def draw_textris(window, renderer, vtxlist, trilist, texmap, plist, poilist, cou
     sdl2.render.SDL_RenderClear(renderer)
 
     vp = sdl2.rect.SDL_Rect()
-    sdl2.render.SDL_RenderGetViewport(renderer, ctypes.byref(vp))    
+    sdl2.render.SDL_RenderGetViewport(renderer, ctypes.byref(vp))
     wscale = vp.w/2
     hscale = vp.h/2
     woff = vp.w/2
@@ -92,7 +91,7 @@ def draw_textris(window, renderer, vtxlist, trilist, texmap, plist, poilist, cou
         ar_y[0] = int(a.y * hscale + hoff)
         ar_y[1] = int(b.y * hscale + hoff)
         ar_y[2] = int(c.y * hscale + hoff)
-        
+
         sdl2.sdlgfx.texturedPolygon(renderer, ar_x, ar_y, 3, tex, 0, 0)
 
     shade = 0xb0
@@ -126,14 +125,14 @@ def draw_textris(window, renderer, vtxlist, trilist, texmap, plist, poilist, cou
                 return
         else: # country name: center it.
             offs = int(-len(name)*step/2)
-        
+
         for ch in name:
             sdl2.sdlgfx.characterRGBA(renderer, x + offs, y - 4, ord(ch), tcolor[0], tcolor[1], tcolor[2], 0xff)
             offs += step
 
     for clabel in countrylabels:
         draw_poi(clabel, None, (0xd0, 0xd0, 0xd0, 0xff))
-    
+
     for poi in poilist:
         if type(poi[1]) is str:
             draw_poi(poi, (0xff, 0xff, 0x00, 0xff), (0x60, 0xe0, 0x80, 0xff))
@@ -173,7 +172,7 @@ def drawsurf(renderer, surf, border, blend):
     y = (vp.h - surf.contents.h)//2
     if border:
         border = sdl2.rect.SDL_Rect(x - 1, y - 1, surf.contents.w + 2, surf.contents.h + 2)
-        
+
         sdl2.render.SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255)
         sdl2.render.SDL_RenderDrawRect(renderer, border)
     dst = sdl2.rect.SDL_Rect(x, y, surf.contents.w, surf.contents.h)
@@ -205,7 +204,7 @@ def loop(window, renderer, choke_ms = 100):
             if rv == 0:
                 break
             elif event.type == sdl2.SDL_QUIT:
-                return            
+                return
             elif event.type == sdl2.SDL_KEYUP:
                 if event.key.keysym.sym == sdl2.SDLK_ESCAPE:
                     return

@@ -17,13 +17,13 @@ Coord3 = collections.namedtuple('Coord3', 'x y z')
 def rotfoo(lon, lat, lonzero, latzero):
     """ http://stackoverflow.com/questions/5278417/rotating-body-from-spherical-coordinates
     The equations for (x,y,z) (spherical-to-cartesian) are
-    
+
     x = r sin θ cos φ
     y = r sin θ sin φ
     z = r cos θ
-    
+
     The equations for rotating (x,y,z) to new points (x', y', z') around the x-axis by an angle α are
-    
+
     x' = x
        = r sin θ cos φ
     y' = y cos α - z sin α
@@ -46,19 +46,18 @@ def rotfoo(lon, lat, lonzero, latzero):
 
     note that the above is physics convention: lon in phi, lat is theta.
     """
-    
+
     theta = lat * math.pi / 180
     phi = math.fmod(lon + lonshift, 360) * math.pi / 180
     alpha = latzero * math.pi / 180
-    
+
     theta1 = math.acos(math.sin(theta)*math.sin(phi)*math.sin(alpha) + math.cos(theta)*math.cos(alpha))
-    phi1 = math.atan2(math.sin(theta)*math.sin(phi)*math.cos(alpha) - math.cos(theta)*math.sin(alpha), 
+    phi1 = math.atan2(math.sin(theta)*math.sin(phi)*math.cos(alpha) - math.cos(theta)*math.sin(alpha),
                             math.sin(theta)*math.cos(phi))
     nlon = 180 * phi1/math.pi
     nlat = 180 * theta1/math.pi
-    
+
     return nlon, nlat
-    
 
 # degs_below_horizon : brightness_factor_wrt_noon
 TWIMAP = [
@@ -70,7 +69,7 @@ TWIMAP = [
 
 # hmm hmm
 # standard/xcom1/globe.rul sez GEODATA/WORLD.DAT
-# so that's relative to 
+# so that's relative to
 #
 # user/mods/Piratez/Ruleset/Piratez_Planet.rul sez Resources/Globe/IMPROVEDGLOBE.DAT f/ex
 # so that's relative to the mod root.
@@ -113,21 +112,19 @@ class VertexList(object):
     def add(self, vtx):
         self._list.append(vtx)
         return len(self._list) - 1
-        
 
 # duh. should map spherical coordinates to x,y e (-1, 1)
 # kinda like NDC coords.
 # convert lon+lat to EPSG:54003 — World Miller Cylindrical
 # cartographic projection
-# return bytes of single-precision float pair (x,y)
 def sph2wmc(coord):
     HC = 2.303413 # max(abs(y)) in WMC
     global stat_x, stat_y, stat_lon, stat_lat
-    
+
     lam = math.pi * coord.lon / 180.0
     phi = math.pi * coord.lat / 180.0
 
-    y = 5.0 * math.log(math.tan(math.pi/4.0 + 2.0*phi/5.0)) / 4.0    
+    y = 5.0 * math.log(math.tan(math.pi/4.0 + 2.0*phi/5.0)) / 4.0
     x = (coord.lon - 180) / 180.0
     y = y / HC
 
@@ -143,7 +140,7 @@ def sph2equirect(coord, coord0):
     coord = SphCoord2((coord.lon - coord0.lon) % 360, coord.lat)#(coord.lat - coord0.lat) % 90)
     lam = math.pi * coord.lon / 180.0
     phi = math.pi * coord.lat / 180.0
-    
+
     # equirect proj
     phi_1 = math.pi/4 # +/- 45 deg lat
     x = coord.lon * math.pi * math.cos(phi_1) / 180.0
@@ -155,25 +152,13 @@ def sph2equirect(coord, coord0):
     stat_lat.update(coord.lat)
 
     return Coord2(x, y)
-    
-
-def polycount(polygons):
-    ptex = {}
-    pcnt = {}
-    for poly in polygons:
-        ptex[poly[0]] = ptex.get(poly[0], 0) + 1
-        vcount = (len(poly) - 1)/2
-        pcnt[vcount] = pcnt.get(vcount, 0) + 1
-
-    pprint.pprint(ptex)
-    pprint.pprint(pcnt)
 
 # http://stackoverflow.com/questions/4870393/rotating-coordinate-system-via-a-quaternion
 
 # split quads into tris
-# hmm. how does texturing go? is it ndc-fixed? yep, it is. so just split and convert into 
+# hmm. how does texturing go? is it ndc-fixed? yep, it is. so just split and convert into
 # indexed arrays of vertices and triangles. no texcoords whatsoever.
-# ds_threshold is parts of degree to merge vertices. None is exact equality. 
+# ds_threshold is parts of degree to merge vertices. None is exact equality.
 # Use 9 since ruls doesnt' seem to have more than 1/8ths degree precision
 def vertex_merge(polygons, polylines, ds_threshold = None):
     def delta_sigma(v0, v1):
@@ -186,13 +171,13 @@ def vertex_merge(polygons, polylines, ds_threshold = None):
         phi1 = v1.lat * math.pi / 180.0
         havdphi = math.sin((phi1 - phi0) / 2.0)
         havdlam = math.sin((lambda1 - lambda0) / 2.0)
-        return 2.0 * math.asin(math.sqrt( 
+        return 2.0 * math.asin(math.sqrt(
               havdphi * havdphi + math.cos(phi0) * math.cos(phi1) * havdlam * havdlam))
-    
+
     vertices = []
     pgone_cvt = []
     pline_cvt = []
-    
+
     ivtx = 0
     # index all vertices
     # polygons
@@ -221,9 +206,9 @@ def vertex_merge(polygons, polylines, ds_threshold = None):
             pl_cvt.append(ivtx)
             ivtx += 1
         pline_cvt.append(tuple(pl_cvt))
-    
+
     #return vertices, pgone_cvt, []
-    
+
     # todo: merge regions', countries' and missionzones' vertices here too.
     # also detect somehow cities: i think texture -1 is it, rest negative texids
     # are hidden pois. (alien bases positions hardcoded? really?)
@@ -237,7 +222,7 @@ def vertex_merge(polygons, polylines, ds_threshold = None):
         def eq_test(v0, v1, thresh=0.0001):
             return abs(v0.lon-v1.lon) < thresh and abs(v0.lat-v1.lat) < thresh
 
-    # merge adjacent enough vertices, 
+    # merge adjacent enough vertices,
     # O(n^2), but whatever, that's preprocessing.
     # for each vertex look what vertices can be mapped to it
     # (which vertices can be replaced by this vertex)
@@ -256,10 +241,10 @@ def vertex_merge(polygons, polylines, ds_threshold = None):
                 merged.add(candidate)
 
         idxset.difference_update(merged) # remove merged ones from further consideration.
-    
+
     unique_vertex_indices = set(vidx_merge_map.values())
-    
-    print("v_len={} mm_len = {}, uniq_len = {}".format(len(vertices), 
+
+    print("v_len={} mm_len = {}, uniq_len = {}".format(len(vertices),
                         len(vidx_merge_map), len(unique_vertex_indices)))
     #open('vertices.py', 'w').write(pprint.pformat(vertices))
     #open('vertices-merge.py', 'w').write(pprint.pformat(vidx_merge_map))
@@ -273,9 +258,9 @@ def vertex_merge(polygons, polylines, ds_threshold = None):
         short_vidx_map[oidx] = idx
         idx += 1
 
-    tri_list = [] 
+    tri_list = []
     for tex, a, b, c in pgone_cvt:
-        tri_list.append((tex, 
+        tri_list.append((tex,
             short_vidx_map[vidx_merge_map[a]],
             short_vidx_map[vidx_merge_map[b]],
             short_vidx_map[vidx_merge_map[c]]))
@@ -286,7 +271,6 @@ def vertex_merge(polygons, polylines, ds_threshold = None):
 
     return short_vertex_list, tri_list, lin_list
 
-
 # projects primitives, fixes up polar areas, splits
 # vertical border spanning primitives.
 def wmc_project(vertices, tris, plines, lonshift = 0):
@@ -296,7 +280,7 @@ def wmc_project(vertices, tris, plines, lonshift = 0):
     # split triangles that has pole as one of the vertices
     def add_vertex(c):
         vtxlist.append(c)
-        return len(vtxlist) - 1 
+        return len(vtxlist) - 1
 
     def is_pole(v):
         return abs(abs(v.lat) - 90) < 0.0001
@@ -329,7 +313,7 @@ def wmc_project(vertices, tris, plines, lonshift = 0):
         c4 = None
 
         if is_pole(a):
-            # split c0 into c3, c4; 
+            # split c0 into c3, c4;
             # resulting tris would be c3 c1 c2; c4 c3 c2.
             c1i = add_vertex(c1)
             c2i = add_vertex(c2)
@@ -337,7 +321,7 @@ def wmc_project(vertices, tris, plines, lonshift = 0):
             c4i = add_vertex(Coord2(c2.x, pole_y(a)))
             return [(tex, c3i, c1i, c2i), (tex, c4i, c3i, c2i)]
         elif is_pole(b):
-            # split c1 into c3, c4; 
+            # split c1 into c3, c4;
             # resulting tris would be c0 c3 c2; c2 c3 c4.
             c0i = add_vertex(c0)
             c2i = add_vertex(c2)
@@ -345,7 +329,7 @@ def wmc_project(vertices, tris, plines, lonshift = 0):
             c4i = add_vertex(Coord2(c2.x, pole_y(b)))
             return [(tex, c0i, c3i, c2i), (tex, c2i, c3i, c4i)]
         elif is_pole(c):
-            # split c2 into c3, c4; 
+            # split c2 into c3, c4;
             # resulting tris would be c0 c1 c3; c1 c3 c4.
             c0i = add_vertex(c0)
             c1i = add_vertex(c1)
@@ -357,13 +341,13 @@ def wmc_project(vertices, tris, plines, lonshift = 0):
             c1i = add_vertex(c1)
             c2i = add_vertex(c2)
             return [(tex, c0i, c1i, c2i)]
-    
+
     # second pass
     # split triangles that span vertical borders
     # of the projection
     def vertisplit(tri):
         # how do we detect them?
-        # well, we just split any triangle across 
+        # well, we just split any triangle across
         # its longest side vertically and keep the split
         # if the sum of the perimeters of the resulting ones
         # is less than the perimeter of the original.
@@ -383,11 +367,11 @@ def wmc_project(vertices, tris, plines, lonshift = 0):
             dx = vtxlist[ai].x - vtxlist[bi].x
             dy = vtxlist[ai].y - vtxlist[bi].y
             return  dx * dx + dy * dy
-            
+
         def p_square(tri):
             tex, ai, bi, ci = tri
             return l_square(ai, bi) + l_square(bi, ci) + l_square(ci, ai)
-        
+
         tex, ai, bi, ci = tri
         a = vtxlist[ai]
         b = vtxlist[bi]
@@ -395,11 +379,11 @@ def wmc_project(vertices, tris, plines, lonshift = 0):
         l2_ab = l_square(ai, bi)
         l2_bc = l_square(bi, ci)
         l2_ca = l_square(ci, ai)
-        
+
         if max(l2_ab, l2_bc, l2_ca) < 2:
             # skip obviously non-spanning tris.
             return [ tri ]
-        
+
         if l2_ab < min(l2_bc, l2_ca):
             # ab is the shortest. -> split the other two -> 'cut off' vertex C.
             cutoff = c
@@ -418,7 +402,7 @@ def wmc_project(vertices, tris, plines, lonshift = 0):
             cutoff_i = bi
             rest = (c, a)
             resti = (ci, ai)
-        
+
         if cutoff.x > 0:
             tri0_cut = add_vertex(Coord2(cutoff.x - 2, cutoff.y))
             tri1_r0  = add_vertex(Coord2(rest[0].x + 2, rest[0].y))
@@ -430,11 +414,11 @@ def wmc_project(vertices, tris, plines, lonshift = 0):
 
         tri0 = (tex, tri0_cut, resti[0], resti[1])
         tri1 = (tex, cutoff_i, tri1_r0, tri1_r1)
-        
+
         if p_square(tri) > p_square(tri0):
             # TODO: clip the new triangles by the vertical borders.
             # this will result in 3 triangles and 4 new vertices.
-            
+
             return [tri0, tri1]
         return [ tri ]
 
@@ -469,7 +453,6 @@ def wmc_project(vertices, tris, plines, lonshift = 0):
 def wmc_project_ll(lon, lat, lonshift):
     return sph2wmc(SphCoord2(math.fmod(lon + lonshift, 360), lat))
 
-
 def extract_poi(pd, vtxlist, lonshift, trans):
     rv = []
     def is_point_zone(mzone):
@@ -486,7 +469,7 @@ def extract_poi(pd, vtxlist, lonshift, trans):
                     # todo: merge into wmc_project() to handle vertisplit
                     lon0, lon1, lat0, lat1 = mzone
                     # this results in rects anyway because projection is cylindrical
-                    
+
                     mzquads.append((wmc_project_ll(lon0, lat0, lonshift),
                                     wmc_project_ll(lon1, lat0, lonshift),
                                     wmc_project_ll(lon1, lat1, lonshift),
@@ -517,32 +500,6 @@ def extract_clabels(pd, vtxlist, lonshift, trans):
         rv.append((vtxi, trans.get(country['type'], country['type'])))
     return rv
 
-"""    
-    range = range_nmi * (1 / 60.0) * (M_PI / 180);
-    
-    void Globe::drawGlobeCircle(double lat, double lon, double radius, int segments)
-{
-	double x, y, x2 = 0, y2 = 0;
-	double lat1, lon1;
-	double seg = M_PI / (static_cast<double>(segments) / 2);
-	for (double az = 0; az <= M_PI*2+0.01; az+=seg) //48 circle segments
-	{
-		//calculating sphere-projected circle
-		lat1 = asin(sin(lat) * cos(radius) + cos(lat) * sin(radius) * cos(az));
-		lon1 = lon + atan2(sin(az) * sin(radius) * cos(lat), cos(radius) - sin(lat) * sin(lat1));
-		polarToCart(lon1, lat1, &x, &y);
-		if ( AreSame(az, 0.0) ) //first vertex is for initialization only
-		{
-			x2=x;
-			y2=y;
-			continue;
-		}
-		if (!pointBack(lon1,lat1))
-			XuLine(_radars, this, x, y, x2, y2, 4);
-		x2=x; y2=y;
-	}
-}
-"""
 # radius r is in degrees of arc. must be < 180?
 def a_circle(clon, clat, r_nmi, nseg  = 96):
     radius = r_nmi * math.pi / (60*180)
@@ -553,9 +510,9 @@ def a_circle(clon, clat, r_nmi, nseg  = 96):
     for si in range(nseg + 2):
         az = (2 * math.pi / nseg ) *  si
         lat = math.asin(math.sin(crlat) * math.cos(radius) + math.cos(crlat) * math.sin(radius) * math.cos(az))
-        lon = crlon + math.atan2(math.sin(az) * math.sin(radius) * math.cos(crlat), 
+        lon = crlon + math.atan2(math.sin(az) * math.sin(radius) * math.cos(crlat),
                             math.cos(radius) - math.sin(crlat) * math.sin(lat))
-        
+
         if si == 0:
             continue # why?
 
@@ -581,14 +538,12 @@ def main():
 
     trans = get_trans(ruleset, 'en-US')
     textures = fileformats.load_geotextures(ruleset, bufpal2surface, file2surface)
-    
+
     orig_polygons = ruleset['globe'].get('polygons', fileformats.load_world_dat(ruleset['globe']['data']))
     orig_plines   = ruleset['globe']['polylines']
-    
-    #polycount(pd['globe']['polygons'])
 
     vertices, triangles, plines = vertex_merge(orig_polygons, orig_plines)
-    #np_vertex_convert(vertices)
+
     def append_circle(lon, lat, rad):
         cpl = a_circle(lon, -lat, rad)
         ppl = []
@@ -604,11 +559,11 @@ def main():
     append_circle(90,0, 800)
     append_circle(135, -40, 800)
     #append_circle(180, 80, 1800)
-    
+
     vtxlist, trilist, plist = wmc_project(vertices, triangles, plines, lonshift)
     poilist, mzquads = extract_poi(ruleset, vtxlist, lonshift, trans)
     countrylabels = extract_clabels(ruleset, vtxlist, lonshift, trans)
-    
+
     print(stat_x, stat_y, stat_lon, stat_lat)
 
     render2d.init()
@@ -618,7 +573,7 @@ def main():
     mzquads = [] # don't render mission zones
 
     render2d.draw_textris(win, ren, vtxlist, trilist, textures, plist, poilist, countrylabels, mzquads)
-    
+
     render2d.loop(win, ren)
     render2d.fini()
 
