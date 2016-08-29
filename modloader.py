@@ -317,6 +317,8 @@ PRIMARY_KEYS = {
     'terrains': 'name',
 
 # None means no merge; replace entirely
+    # appeared in 3.2
+    'commendations': None,
     # appeared in 3.1
     'converter': None,
     'difficultyCoefficient': None,
