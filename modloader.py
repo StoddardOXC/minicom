@@ -31,7 +31,7 @@ class Finder(object):
             for dirpath in xdg_datadirs:
                 self.datadirs.append(os.path.join(dirpath, "openxcom"))
             self.datadirs.append("/usr/local/share/openxcom")
-            self.datadirs.append("/usr/share/openxcom")            
+            self.datadirs.append("/usr/share/openxcom")
             # user dirs
             self.userdirs.append(os.path.join(os.environ["HOME"], ".local/share/openxcom"))
             if "XDG_USER_DIR" in os.environ:
@@ -41,19 +41,19 @@ class Finder(object):
                 self.cfgdirs.append(os.path.join(os.environ["XDG_CONFIG_HOME"], 'openxcom'))
             else:
                 self.cfgdirs.append(os.path.join(os.environ["HOME"], '.config/openxcom'))
-                
+
         elif sys.platform =='darwin':
             homedir = os.environ["HOME"]
             self.datadirs.append(os.path.join(homedir, "Library/Application Support/OpenXcom"))
             self.datadirs.append("/Users/Shared/OpenXcom/")
             self.homedirs.append(os.path.join(homedir, "Library/Application Support/OpenXcom"))
-            
+
         elif sys.plaform == 'win32':
-            """ ctypes: 
-                    SHGetFolderPathA 
-                    PathAppendA 
-                    GetModuleFileNameA 
-                    GetCurrentDirectoryA 
+            """ ctypes:
+                    SHGetFolderPathA
+                    PathAppendA
+                    GetModuleFileNameA
+                    GetCurrentDirectoryA
             (maybe not A)
             http://stackoverflow.com/questions/3858851/python-get-windows-special-folders-for-currently-logged-in-user
             """
@@ -75,7 +75,7 @@ class Finder(object):
                     dirlist[0] = dirpath
                 else:
                     dirlist.insert(0, dirpath)
-        
+
         set_forced(self.cfgdirs, cfgdir)
         set_forced(self.userdirs, userdir)
         set_forced(self.datadirs, datadir)
@@ -120,7 +120,7 @@ class Finder(object):
 
     """ Use cases:
         - get the config. returns first config found
-          across the defined cfgdirs. 
+          across the defined cfgdirs.
 
         - load mod resources
           - needs mod root
@@ -133,7 +133,7 @@ class Finder(object):
 
         - list a directory - for slash-ending lookups or globs
           slash-ending is just a whatever/* case of a glob.
-          
+
         core data vs user mod data question.
         the former shouldn't touch userdirs at all.
 
@@ -158,7 +158,7 @@ class Finder(object):
         # split the path into uppercase components
         components = []
         remnant = pathglob.upper()
-        while remnant != '': 
+        while remnant != '':
             dirname, basename = os.path.split(remnant)
             if basename == '': # pathglob ends in a slash: list entire dir
                 basename = '*'
@@ -184,7 +184,7 @@ class Finder(object):
                     if cmp(direntry.upper(), pathcomp):
                         nextroots.append(os.path.join(candiroot, direntry))
             candiroots = nextroots
-        
+
         return nextroots
 
     def glob_data(self, pathglob):
@@ -242,7 +242,7 @@ class ModMeta(object):
             self.name = md["name"]
         except FileNotFoundError:
             print("no metadata for {}".format(path))
-        
+
         self.finder = finder
         # expand extResDirs if any
         return
@@ -252,7 +252,7 @@ class ModMeta(object):
                 if os.path.isdir(dp):
                     erds.append(dp)
         self.extResDirs = erds
-    
+
     def _bump_mtime(self, path):
         mt = os.stat(path).st_mtime
         if mt > self.mtime:
@@ -263,7 +263,7 @@ class ModMeta(object):
             self.id, self.master, self.name, self.version, self.root, self.extResDirs)
 
     __repr__ = __str__
-    
+
     def findall(self, pathglob):
         rv = self.finder.erdglob(pathglob, self.extResDirs) if len(self.extResDirs) > 0 else []
         return self.finder.glob(pathglob, [self.root]) + rv
@@ -274,10 +274,15 @@ class ModMeta(object):
         except IndexError:
             raise FileNotFoundError("finder={} mod_root={} pathglob={}".format(self.finder, self.root, pathglob))
 
+
+
+def merge_globe(left, right):
+    left.update(right)
+    return left
 """
     A map of unique attribute names in mod yaml doc collections
     to the collections' names
-    
+
     other special cases:
      - delete in soldiers::soldierNames (res ref)
             probably means the name set should be reset.
@@ -317,6 +322,8 @@ PRIMARY_KEYS = {
     'terrains': 'name',
 
 # None means no merge; replace entirely
+    # 3.2 too? None for now, need investigation
+    'extended': None,
     # appeared in 3.2
     'commendations': None,
     # appeared in 3.1
@@ -349,12 +356,12 @@ PRIMARY_KEYS = {
     'kneelBonusGlobal': None,
     'monthlyRatings': None,
     'missionRatings': None,
-    'globe': None,
+    'globe': merge_globe,
     'startingConditions': None,
-    
+
 # XcomUtil_StatStrings - a problem where mods introduce arbitrary keys.
 # how to merge them?
-    'statStrings': None,  
+    'statStrings': None,
 }
 
 class ConstraintViolation(Exception):
@@ -410,7 +417,7 @@ def merge_extrastrings(mod, left, right):
 
 def merge_extrasprites(mod, left, right):
     """ seems like extrasprites' type is actually a type rather than a key.
-        
+
         soo, extrasprites is a list of dicts .. no dammit. gotta dig moar into ze code.
         [ {...},
           {'files': {0: 'Resources/UI/invpaste_empty.png'}, 'height': 16, 'singleImage': True, 'type': 'InvPasteEmpty', 'width': 16},
@@ -418,7 +425,7 @@ def merge_extrasprites(mod, left, right):
           {'files': {-5: 'Resources/Weapons/Zombie.png'}, 'height': 48, 'type': 'BIGOBS.PCK', 'width': 32},
           ]
         and how tis used?
-        
+
         mod.cpp has:
             std::map<std::string, ExtraStrings *> _extraStrings;
 
@@ -426,7 +433,7 @@ def merge_extrasprites(mod, left, right):
             std::map<std::string, SurfaceSet*> _sets;
             std::map<std::string, SoundSet*> _sounds;
             std::map<std::string, Music*> _musics;
-        
+
         extraSprites yaml parser handler says:
             std::string type = (*i)["type"].as<std::string>();
             std::auto_ptr<ExtraSprites> extraSprites(new ExtraSprites());
@@ -436,12 +443,12 @@ def merge_extrasprites(mod, left, right):
                 extraSprites->load(*i, 0);
             _extraSprites.push_back(std::make_pair(type, extraSprites.release()));
             _extraSpritesIndex.push_back(type);
-        
+
         Mod::loadExtraResources() says:
             if single image:
-                if type not in 
-        
-            
+                if type not in
+
+
     """
     for es in right:
         es['_mod_index'] = mod.index
@@ -463,9 +470,9 @@ def merge_extrasounds(mod, left, right):
 def merge(mod_idx, primarykey, left, right, show_diff_for = []):
     """ drop stuff from left that is marked for deletion in right
         then replace/update the rest according to the primarykey
-        
+
         return the values() instead of hash. eww.
-        
+
         also if primarykey is none, just replace.
     """
     if primarykey is None:
@@ -477,6 +484,8 @@ def merge(mod_idx, primarykey, left, right, show_diff_for = []):
                 if type(it) is dict:
                     it['_mod_index'] = mod_idx
         return right
+    elif callable(primarykey):
+        return primarykey(left, right)
     left_dict = list_to_dict(primarykey, left)
     deleted = []
     for item in right:
@@ -591,14 +600,14 @@ def load_vanilla(mod):
             t = copy.deepcopy(SI_TEMPLATE)
             t["type"] = os.path.split(fpath)[1] if _type is None else _type
             t["resType"] = fpath[-3:].upper() if resType is None else resType
-            t["files"][0] = fpath            
+            t["files"][0] = fpath
             rv.append(t)
         return rv
 
     surfaces = [
         { "type":"INTERWIN.DAT", "width": 160, "height": 600, "subX": 160, "resType": "SCR", "files": { 0: fi("GEODATA/INTERWIN.DAT") }},
     ]
-    
+
     surfaces += def_buncha_files("GEOGRAPH/*.SCR", fail = False)
     surfaces += def_buncha_files("GEOGRAPH/*.BDY", fail = False)
     surfaces += def_buncha_files("GEOGRAPH/*.SPK", fail = False)
@@ -611,7 +620,7 @@ def load_vanilla(mod):
     # sounds: GEO.CAT: SOUND2_CAT | SAMPLE.CAT; BATTLE.CAT: SOUND1.CAT | SAMPLE2.CAT; dir: SOUND/
     # + intro.cat, sample3.cat
 
-    # 
+    #
     # Mod.cpp::loadBattlescapeResources()
         { "type": "SPICONS.DAT",    "subX": 32,  "subY": 24, "files": { 0: fi("UFOGRAPH/SPICONS.DAT") }},
         { "type": "CURSOR.PCK",     "subX": 32,  "subY": 40, "files": { 0: fi("UFOGRAPH/CURSOR.PCK") }},
@@ -621,15 +630,15 @@ def load_vanilla(mod):
         { "type": "MEDIBITS.DAT",   "subX": 52,  "subY": 58, "files": { 0: fi("UFOGRAPH/MEDIBITS.DAT") }},
         { "type": "DETBLOB.DAT",    "subX": 16,  "subY": 16, "files": { 0: fi("UFOGRAPH/DETBLOB.DAT") }},
     ]
-    
+
     # load all of the terrain. we're bankin! (maybe later)
     "TERRAIN/*.PCK" # 32x40
-    
+
     "UNITS/*.PCK" # 32x40 except BIGOBS.PCK which is 32x48
-    
+
     #if os.flen(chrys.tab) < 225*2:
     #    raise Exception("Invalid CHRYS.PCK, please patch your X-COM data to the latest version")
-    
+
     try:
         loftemps = fi("TERRAIN/LOFTEMPS.DAT") # tftd
     except FileNotFoundError:
@@ -639,9 +648,9 @@ def load_vanilla(mod):
         { "type": "LOFTEMPS.DAT", "resType": "loftemps", "subX": 16, "subY": 16, "files": { 0: loftemps }},
         { "type": "TAC00.SCR", "width": 320, "height": 200, "singleImage": True, "files": { 0: fi("UFOGRAPH/TAC00.SCR")}},
     ]
-    
+
     # mildly annoying lbm stuff skipped.
-    
+
     palettes = { }
     offs = 0
     offstep = 768+6
@@ -655,7 +664,7 @@ def load_vanilla(mod):
     # last 16 greyscale and fixup not implemented yet.
 
     # optional stuff, means, skip if not found (think that has to do with tftd)
-    
+
     for fpath in """UFOGRAPH/TAC01.SCR
                     UFOGRAPH/DETBORD.PCK
                     UFOGRAPH/DETBORD2.PCK
@@ -664,7 +673,7 @@ def load_vanilla(mod):
                     UFOGRAPH/SCANBORD.PCK
                     UFOGRAPH/UNIBORD.PCK""".split():
         surfaces += def_buncha_files(fpath, None, "SPK", fail = False)
-        
+
     for tftd_surf in def_buncha_files("UFOGRAPH/*.BDY", fail = False):
         print(tftd_surf)
         fn = os.path.split(tftd_surf["files"][0]).upper()
@@ -680,32 +689,32 @@ def load_vanilla(mod):
 
     # // Load Battlescape inventory: UFOGRAPH/*.SPK
     surfaces += def_buncha_files("UFOGRAPH/*.SPK")
-    
+
     # crazy stuff about Options::battleHairBleach
-    
-    
+
+
     # Applies necessary modifications to vanilla resources.
     # Mod::modResources()
-    
+
     # bigger geoscape background - tiles GEOBORD.SCR x3 in w and h
     # saves as ALTGEOBORD.SCR
 
     # some stuff with ALTBACK07.SCR being made from GEOGRAPH/BACK07.SCR
-    # 
-    
+    #
+
     # soldier stat screens:
     # shenanigans with BACK06.SCR  - base info screen
     # same thing with UNIBORD.PCK - battlescape info screen?
-    
+
     # duplicate the HANDOB.PCK into HANDOB2.PCK:
     # // handob2 is used for all the left handed sprites.
     surfaces += [
         { "type": "HANDOB02.PCK", "subX": 32, "subY": 40, "files": { 0: fi("UNITS/HANDOB.PCK") }},
     ]
-    
+
     for surf in surfaces:
         surf["_mod_index"] = mod.index
-    
+
     # load std trans as extraStrings so that there are no extra entity types to merge
     try:
         lang = mod.lang
@@ -713,7 +722,7 @@ def load_vanilla(mod):
     except FileNotFoundError:
         lang = FALLBACK_LANG
         trans = yamload(fi(os.path.join('Language', lang + '.yml')))
-   
+
     return { 'extraSprites': surfaces, 'extraStrings': [{ 'type': lang, 'strings': trans[lang] }], '_palettes': palettes }
 
 def load(finder):
@@ -721,7 +730,7 @@ def load(finder):
     lang = config['options'].get('language', FALLBACK_LANG)
 
     present_mods = dict((mod.id, mod) for mod in [ ModMeta(p, finder) for p in finder.modlist ])
-    
+
     # gather all active mods into a set
     active_mods = set()
     for mod in config['mods']:
@@ -734,7 +743,7 @@ def load(finder):
                     raise Exception("MasterModIsNotAMasterError: {} is not a master as {} expects".format(
                                         master_mod.id, modinfo.id))
                 active_mods.add(master_mod)
-    
+
     # resolve dependencies into a load order
     def find_least_dependent(modset, masters):
         for mod in modset:
@@ -769,7 +778,7 @@ def load(finder):
         rul_dir = os.path.join(mod.root, 'Ruleset')
         if os.path.isdir(rul_dir):
             yamdirload_and_merge(mod, ruleset, rul_dir)
-    
+
     #ruleset['extraStrings'] = [] # skip for now to ease the load on the editor
     ruleset['_mod_meta'] = []
     for mod in load_order:
@@ -789,7 +798,9 @@ def main():
     userdir = os.path.join(sys.argv[1], 'user')
     datadir = sys.argv[1]
     cfgdir  = userdir
-    
+    ofname = 'ruleset.py' if len(sys.argv) < 3 else sys.argv[2]
+
+
     finder = Finder(cfgdir, userdir, datadir)
     print(finder)
     print(finder.config)

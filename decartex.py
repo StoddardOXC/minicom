@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
 
-import math, pickle, pprint, sys, os, collections
+import math, pickle, pprint, sys, os, collections, time
 import render2d
-from render2d import bufpal2surface, file2surface
+from render2d import bufpal2surface, file2surface, chunkofsurface
 import fileformats
 
 from ruleset import ruleset
@@ -124,7 +124,10 @@ def sph2wmc(coord):
     lam = math.pi * coord.lon / 180.0
     phi = math.pi * coord.lat / 180.0
 
-    y = 5.0 * math.log(math.tan(math.pi/4.0 + 2.0*phi/5.0)) / 4.0
+    mt = math.tan(math.pi/4.0 + 2.0*phi/5.0)
+    #print(mt)
+    #if (mt < 0): mt = -mt
+    y = 5.0 * math.log(mt) / 4.0
     x = (coord.lon - 180) / 180.0
     y = y / HC
 
@@ -454,6 +457,16 @@ def wmc_project_ll(lon, lat, lonshift):
     return sph2wmc(SphCoord2(math.fmod(lon + lonshift, 360), lat))
 
 def extract_poi(pd, vtxlist, lonshift, trans):
+    """ region def:
+            areas: list-of (lonMin, lonMax, latMin, latMax)
+            cost: int (base-build cost?)
+            regionWeight: int
+            missionWeights: map-of {missionType: int}
+            missionZones:
+                list-of:
+                    list-of:
+                        (lonMin, lonMax, latMin, latMax, [texture, [name]])
+    """
     rv = []
     def is_point_zone(mzone):
         return mzone[0] == mzone[1] and mzone[2] == mzone[3]
@@ -462,7 +475,6 @@ def extract_poi(pd, vtxlist, lonshift, trans):
         if 'missionZones' not in reg:
             continue
         mztype = reg['type']
-        #print(mztype)
         for mzlist in reg['missionZones']:
             for mzone in mzlist:
                 if len(mzone) == 4:
@@ -481,15 +493,15 @@ def extract_poi(pd, vtxlist, lonshift, trans):
                         vtxlist.append(wmc_project_ll(mzone[0], mzone[2], lonshift))
                         rv.append((vtxi, mzone[4]))
                 elif len(mzone) == 6: # city?
-                    if is_point_zone(mzone) and mzone[4] == -1:
+                    if is_point_zone(mzone) and mztype == 'REGION_CITIES' or True:
                         # yep, a city
                         vtxi = len(vtxlist)
                         vtxlist.append(wmc_project_ll(mzone[0], mzone[2], lonshift))
                         rv.append((vtxi, trans.get(mzone[5], mzone[5])))
                     else:
-                        print(mzone)
+                        print(mztype, mzone)
                 else:
-                    print(mzone)
+                    print(mztype, mzone)
     return rv, mzquads
 
 def extract_clabels(pd, vtxlist, lonshift, trans):
@@ -537,10 +549,10 @@ def main():
     h = int(0.733 * w)
 
     trans = get_trans(ruleset, 'en-US')
-    textures = fileformats.load_geotextures(ruleset, bufpal2surface, file2surface)
+    textures = fileformats.load_geotextures(ruleset, bufpal2surface, file2surface, chunkofsurface)
 
     orig_polygons = ruleset['globe'].get('polygons', fileformats.load_world_dat(ruleset['globe']['data']))
-    orig_plines   = ruleset['globe']['polylines']
+    orig_plines   = ruleset['globe'].get('polylines', [])
 
     vertices, triangles, plines = vertex_merge(orig_polygons, orig_plines)
 
@@ -552,30 +564,41 @@ def main():
             ppl.append(i)
             vertices.append(sv)
         plines.append(ppl)
-    append_circle(55,70,800)
-    append_circle(-90,0,800)
-    append_circle(-20,30,800)
-    append_circle(-60,50,800)
-    append_circle(90,0, 800)
-    append_circle(135, -40, 800)
-    #append_circle(180, 80, 1800)
+    if False:
+        append_circle(55,70,800)
+        append_circle(-90,0,800)
+        append_circle(-20,30,800)
+        append_circle(-60,50,800)
+        append_circle(90,0, 800)
+        append_circle(135, -40, 800)
+        #append_circle(180, 80, 1800)
 
-    vtxlist, trilist, plist = wmc_project(vertices, triangles, plines, lonshift)
-    poilist, mzquads = extract_poi(ruleset, vtxlist, lonshift, trans)
-    countrylabels = extract_clabels(ruleset, vtxlist, lonshift, trans)
-
-    print(stat_x, stat_y, stat_lon, stat_lat)
+    #print(stat_x, stat_y, stat_lon, stat_lat)
 
     render2d.init()
     win, ren = render2d.openwindow((w, h))
 
-    poilist = filter(lambda poi: type(poi[1]) is str, poilist) # filter out enemy bases and stuff
-    mzquads = [] # don't render mission zones
 
-    render2d.draw_textris(win, ren, vtxlist, trilist, textures, plist, poilist, countrylabels, mzquads)
+    def inputfoo(*args, **kwargs):
+        pass
 
-    render2d.loop(win, ren)
+    def renderfoo(win, ren):
+        vtxlist, trilist, plist = wmc_project(vertices, triangles, plines, lonshift)
+        poilist, mzquads = extract_poi(ruleset, vtxlist, lonshift, trans)
+        countrylabels = extract_clabels(ruleset, vtxlist, lonshift, trans)
+        poilist = filter(lambda poi: type(poi[1]) is str, poilist) # filter out enemy bases and stuff
+        mzquads = [] # don't render mission zones
+
+        render2d.draw_textris(win, ren, vtxlist, trilist, textures, plist, poilist, countrylabels, mzquads)
+        time.sleep(100500)
+    render2d.loop(win, ren, inputfoo, renderfoo)
     render2d.fini()
+
+"""
+
+Mkay, we have buncha static lists
+
+"""
 
 if __name__ == '__main__':
     main()

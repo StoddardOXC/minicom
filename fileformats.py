@@ -3,18 +3,19 @@
 
 """
 
-import struct
+import struct, pprint
 
 def load_world_dat(planet_dat):
     "http://www.ufopaedia.org/index.php/WORLD.DAT"
     dat = open(planet_dat, "rb").read()
     dat_t = struct.Struct('<hhhhhhhhhh')
     rv = []
+    # 8
     for rec in struct.iter_unpack('<hhhhhhhhhh', dat):
         if rec[6] == -1: # tri
-            rv.append([rec[8]] + list(map(lambda x: 8 * x, rec[:6])))
+            rv.append([rec[8]] + list(map(lambda x: x/8.0, rec[:6])))
         else: # quad
-            rv.append([rec[8]] + list(map(lambda x: 8 * x, rec[:8])))
+            rv.append([rec[8]] + list(map(lambda x: x/8.0, rec[:8])))
     return rv
 
 def load_palette(ruleset, palname):
@@ -37,18 +38,18 @@ def get_sprite_mergelist(ruleset, typestr):
             ml.append(sd)
     ml.sort(key = lambda x: x['_mod_index'])
     return ml
-    
+
 _texdump = []
 def load_texture_dat(texture_dat, subX, subY):
     """http://www.ufopaedia.org/index.php/TEXTURE.DAT
-    
+
     this returns a list of 32x32x1 byte objects,
     """
     lodlevels = 3
     reclen = subX * subY
     data = open(texture_dat, 'rb').read()
     tex_in_lod = (len(data)//reclen)//lodlevels
-    
+
     rv = []
     i = 0
     for lod in range(lodlevels):
@@ -57,28 +58,51 @@ def load_texture_dat(texture_dat, subX, subY):
             i += 1
     return rv
 
-def load_geotextures(ruleset, surf_conv, surf_load):
-    """ returns patched flat list of suitable converted/loaded surfaces 
+# fixme: wrong name
+def load_textures_img(imgfname, subX, subY, surf_load, surf_cut):
+    surf = surf_load(imgfname)
+    w = surf.contents.w
+    h = surf.contents.h
+    rv = []
+    for iy in range(int(h/subY)):
+        for ix in range(int(w/subX)):
+           rv.append(surf_cut(surf, ix*subX, iy*subY, subX, subY))
+    return rv
+
+
+def load_geotextures(ruleset, surf_conv, surf_load, surf_cut):
+    """ returns patched flat list of suitable converted/loaded surfaces
         surf_conv should accept (bytes, w, h, pal)
         surf_load should accept a filename
-        
+
         to be expanded so that a texalbum builder is accepted instead.
     """
     ml = get_sprite_mergelist(ruleset, 'texture.dat')
     tdat = ml.pop(0)
     if len(tdat['files']) != 1 or 'subX' not in tdat:
         raise BadMod("first texture.dat has no subX")
-    
+
     pal = load_palette(ruleset, 'PAL_GEOSCAPE')
     tbyteseqs = load_texture_dat(tdat['files'][0], tdat['subX'], tdat['subY'])
+    print("loaded", tdat['files'][0])
     rv = []
     for tbyteseq in tbyteseqs:
         rv.append(surf_conv(tbyteseq, tdat['subX'], tdat['subY'], pal))
-    
+
+    """ okay, tpatch can be either:
+        - lack subX, contain multiple files with indices (piratez)
+        - have subX, contain a file that replaces all  (hobbes), with lodlevels and such?
+    """
     for tpatch in ml:
-        for tidx, tname in tpatch['files'].items():
-            rv[tidx] = surf_load(tname)
-    
+        pprint.pprint(ml)
+        if len(tpatch['files']) == 1 and 'subX' in tpatch:
+            pprint.pprint(tpatch)
+            rv = load_textures_img(tpatch['files'][0], tpatch['subX'], tpatch['subY'], surf_load, surf_cut)
+        else:
+            for tidx, tname in tpatch['files'].items():
+                print(tidx, tname)
+                rv[tidx] = surf_load(tname)
+
     return rv
 
 def load_pck(pck_path, tab_path, tab_type = 2, w = 32):
@@ -111,4 +135,4 @@ def load_pck(pck_path, tab_path, tab_type = 2, w = 32):
         rv.append(raw_data)
     return rv
 
-    
+

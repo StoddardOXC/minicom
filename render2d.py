@@ -6,6 +6,7 @@ import sdl2
 import sdl2.events
 import sdl2.video
 import sdl2.surface
+import sdl2.rect
 import sdl2.blendmode
 import sdl2.pixels
 import sdl2.render
@@ -36,6 +37,13 @@ def bufpal2surface(buf, w, h, pal):
 
 def file2surface(fname):
     return sdl2.sdlimage.IMG_Load(fname.encode("utf-8"))
+
+def chunkofsurface(surf, x, y, w, h):
+    rv = RGBAsurface(w, h)
+    srcr = sdl2.rect.SDL_Rect(x, y, w, h)
+    dstr = sdl2.rect.SDL_Rect(0, 0, w, h)
+    sdl2.surface.SDL_BlitSurface(surf, srcr, rv, dstr)
+    return rv
 
 ctypes.pythonapi.PyByteArray_AsString.restype = ctypes.c_void_p
 def bar2voidp(bar):
@@ -195,7 +203,7 @@ def openwindow(size=(480, 320), title='minicom', icon=None, resizable = True):
     sdl2.render.SDL_RenderSetViewport(renderer, ctypes.byref(vp))
     return (window, renderer)
 
-def loop(window, renderer, choke_ms = 100):
+def loop(window, renderer, inputfoo, renderfoo, choke_ms = 100):
     while True:
         loopstart = sdl2.SDL_GetTicks()
         while True:
@@ -207,24 +215,20 @@ def loop(window, renderer, choke_ms = 100):
                 return
             elif event.type == sdl2.SDL_KEYUP:
                 if event.key.keysym.sym == sdl2.SDLK_ESCAPE:
-                    return
+                    if inputfoo():
+                        return
             elif event.type == sdl2.SDL_WINDOWEVENT:
                 if event.window.event == sdl2.SDL_WINDOWEVENT_RESIZED:
-                    raise NotImplemented
                     sz = Size2(event.window.data1, event.window.data2)
-                    fbo.resize(sz)
-                    grid.reshape(sz)
-                    hud.reshape(sz)
                     sdl2.SDL_GetWindowSize(window, ctypes.byref(w_w), ctypes.byref(w_h))
                 elif sdl2.SDL_WINDOWEVENT_CLOSE:
-                    continue
-                    return
+                    inputfoo()
                 else:
                     continue
                     print(event.window.event)
             elif event.type == sdl2.SDL_MOUSEBUTTONDOWN:
-                return
+                inputfoo()
         elapsed = sdl2.SDL_GetTicks() - loopstart
         if choke_ms > elapsed:
             sdl2.SDL_Delay(choke_ms - elapsed)
-    
+        renderfoo(window, renderer)
