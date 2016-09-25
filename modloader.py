@@ -274,23 +274,219 @@ class ModMeta(object):
         except IndexError:
             raise FileNotFoundError("finder={} mod_root={} pathglob={}".format(self.finder, self.root, pathglob))
 
+class ConstraintViolation(Exception):
+    pass
+
+def list_to_dict(primarykey, a_list):
+    rv = {}
+    for item in a_list:
+        if item[primarykey] in rv:
+            raise ConstraintViolation("list_to_dict({}, {}): item[primarykey]={} is in already".format(
+                primarykey, a_list, item[primarykey] ))
+        rv[item[primarykey]] = item
+    return rv
+
+def dict_to_list(pkey_name, a_dict):
+    rv = []
+    for v in a_dict.values():
+        if pkey_name not in v:
+            raise Exception("CantConvertDictToListMissingPKey: {} not in {!r}".format(pkey_name, v))
+        rv.append(v)
+    return rv
+
+def merge_extrastrings(mod_idx, left, right):
+    ldict = list_to_dict('type', left)
+    rdict = list_to_dict('type', right)
+
+    def print_count():
+        for lang, sss in ldict.items():
+            print("left: {}/{}, {}".format(lang, sss['type'], len(sss['strings'])))
+        for lang, sss in rdict.items():
+            print("right: {}/{}, {}".format(lang, sss['type'], len(sss['strings'])))
+
+    #print_count()
+
+    for lang in rdict.keys():
+        if lang in ldict.keys():
+            # TODO: detect replacements
+            ldict[lang]['strings'].update(rdict[lang]['strings'])
+            print("extraStrings: updated", lang)
+        else:
+            ldict[lang] = { 'type': lang, 'strings': rdict[lang]['strings'] }
+            print("extraStrings: added", lang)
+
+    return list(ldict.values())
+
+def merge_extrasprites(mod_idx, left, right):
+    """ seems like extrasprites' type is actually a type rather than a key.
+
+        soo, extrasprites is a list of dicts .. no dammit. gotta dig moar into ze code.
+        [ {...},
+          {'files': {0: 'Resources/UI/invpaste_empty.png'}, 'height': 16, 'singleImage': True, 'type': 'InvPasteEmpty', 'width': 16},
+          {'files': {-4: 'Resources/Weapons/Terror.png'}, 'height': 96, 'subX': 32, 'subY': 48, 'type': 'BIGOBS.PCK', 'width': 64},
+          {'files': {-5: 'Resources/Weapons/Zombie.png'}, 'height': 48, 'type': 'BIGOBS.PCK', 'width': 32},
+          ]
+        and how tis used?
+
+        mod.cpp has:
+            std::map<std::string, ExtraStrings *> _extraStrings;
+
+            std::map<std::string, Surface*> _surfaces;
+            std::map<std::string, SurfaceSet*> _sets;
+            std::map<std::string, SoundSet*> _sounds;
+            std::map<std::string, Music*> _musics;
+
+        extraSprites yaml parser handler says:
+            std::string type = (*i)["type"].as<std::string>();
+            std::auto_ptr<ExtraSprites> extraSprites(new ExtraSprites());
+            if (type != "TEXTURE.DAT")
+                extraSprites->load(*i, _modOffset);
+            else
+                extraSprites->load(*i, 0);
+            _extraSprites.push_back(std::make_pair(type, extraSprites.release()));
+            _extraSpritesIndex.push_back(type);
+
+        Mod::loadExtraResources() says:
+            if single image:
+                if type not in
 
 
-def merge_globe(left, right):
+    """
+    for es in right:
+        es['_mod_index'] = mod_idx
+        left.append(es)
+    return left
+
+def merge_extrasounds(mod_idx, left, right):
+    print(" merge_extrasounds(): skipping")
+    return left
+
+def merge_globe(mod_idx, left, right):
     left.update(right)
     return left
-"""
-    A map of unique attribute names in mod yaml doc collections
+
+def merge(mod_idx, primarykey, left, right, show_diff_for = []):
+    """ drop stuff from left that is marked for deletion in right
+        then replace/update the rest according to the primarykey
+
+        return the values() instead of hash. eww.
+
+        also if primarykey is none, just replace.
+    """
+    if primarykey is None:
+        print("      overwrite all")
+        if type(right) is dict:
+            right['_mod_index'] = mod_idx
+        elif type(right) is list:
+            for it in right:
+                if type(it) is dict:
+                    it['_mod_index'] = mod_idx
+        return right
+    elif callable(primarykey):
+        return primarykey(mod_idx, left, right)
+    left_dict = list_to_dict(primarykey, left)
+    deleted = []
+    for item in right:
+        if 'delete' in item:
+            assert type(item) is dict
+            assert len(item) == 1
+            try:
+                del left_dict[item['delete']]
+                print("      del", item['delete'])
+            except KeyError:
+                print("      del {}: missing".format(item['delete']))
+            deleted.append(item['delete'])
+        else:
+            itype = item[primarykey]
+            if itype in left_dict:
+                print("      mod", itype)
+                if itype in show_diff_for:
+                    print("original: {}\n\n".format(pprint.pformat(left_dict[itype])))
+                    print("update:   {}\n\n".format(pprint.pformat(item)))
+                    left_dict[itype].update(item)
+                    print("new:      {}\n\n".format(pprint.pformat(left_dict[itype])))
+                else:
+                    left_dict[itype].update(item)
+            else:
+                if itype in deleted:
+                    print("      add", itype)
+                left_dict[itype] = item
+            left_dict[itype]['_mod_index'] = mod_idx
+    return dict_to_list(primarykey, left_dict)
+
+def expand_paths(mod, rulename, rule):
+    if rulename == 'globe':
+        if 'data' in rule:
+            rule['data'] = mod.findone(rule['data'])
+    elif rulename == 'fontName':
+        rule = mod.findone(os.path.join('Language',rule)) # dammit, another implicit rule
+    elif rulename == 'cutscenes':
+        for scene in rule:
+            if 'videos' in scene:
+                vidpaths = []
+                for vp in scene['videos']:
+                    vidpaths.append(mod.findone(vp))
+                    print( vidpaths )
+                scene['videos'] = vidpaths
+            if 'slideshow' in scene:
+                for slide in scene['slideshow']['slides']:
+                    slide['imagePath'] = mod.findone(slide['imagePath'])
+                    print( slide['imagePath'] )
+    elif rulename == 'soldiers':
+        for soldier in rule:
+            snames = []
+            for sname in soldier['soldierNames']:
+                if sname == 'delete':
+                    snames = []
+                else:
+                    for fname in mod.findall(sname):
+                        if fname.lower().endswith('.nam'):
+                            snames.append(fname)
+            soldier['soldierNames'] = snames
+    elif rulename == 'terrains':
+        for terrain in rule:
+            if 'delete' in terrain:
+                continue
+            terrain["mapFiles"] = []
+            for mb in terrain['mapBlocks']:
+                terrain["mapFiles"].append({
+                "type": mb["name"],
+                "map": mod.findone("MAPS/" + mb["name"] + ".MAP"),
+                "rmp": mod.findone("ROUTES/" + mb["name"] + ".RMP")})
+            terrain["mapDataFiles"] = []
+            for mds in terrain["mapDataSets"]:
+                terrain["mapDataFiles"].append({
+                    "type" : mds,
+                    "mcd": mod.findone("TERRAIN/" + mds + ".MCD"),
+                    "pck": mod.findone("TERRAIN/" + mds + ".PCK"),
+                    "tab": mod.findone("TERRAIN/" + mds + ".TAB")})
+    elif rulename == 'extraSprites':
+        for extrasprite in rule:
+            esfiles = {}
+            for idx, path in extrasprite['files'].items():
+                expath = mod.findone(path)
+                if expath is None:
+                    raise WTF
+                esfiles[idx] = expath
+            extrasprite['files'] = esfiles
+    return rule
+
+""" A map of unique attribute names in mod yaml doc collections
     to the collections' names
 
-    other special cases:
+    Special cases:
      - delete in soldiers::soldierNames (res ref)
             probably means the name set should be reset.
+            handled in expand_paths()
      - extraStrings
             handled explicitly, since they require second-tier dict merge
      - extraSprites, extraSounds
             modIndex/modOffset shenanigans
-"""
+     - extraSounds
+            might be same as above, but not implemented
+     - globe
+            straight dict update
+    """
 PRIMARY_KEYS = {
     'items': 'type',
     'units': 'type',
@@ -320,6 +516,10 @@ PRIMARY_KEYS = {
     'research': 'name',
     'manufacture': 'name',
     'terrains': 'name',
+
+    'extraStrings': merge_extrastrings,
+    'extraSprites': merge_extrasprites,
+    'extraSounds': merge_extrasounds,
 
 # None means no merge; replace entirely
     # 3.2 too? None for now, need investigation
@@ -364,212 +564,6 @@ PRIMARY_KEYS = {
     'statStrings': None,
 }
 
-class ConstraintViolation(Exception):
-    pass
-
-def list_to_dict(primarykey, a_list):
-    rv = {}
-    for item in a_list:
-        if item[primarykey] in rv:
-            raise ConstraintViolation("list_to_dict({}, {}): item[primarykey]={} is in already".format(
-                primarykey, a_list, item[primarykey] ))
-        rv[item[primarykey]] = item
-    return rv
-
-def dict_to_list(pkey_name, a_dict):
-    rv = []
-    for v in a_dict.values():
-        if pkey_name not in v:
-            raise Exception("CantConvertDictToListMissingPKey: {} not in {!r}".format(pkey_name, v))
-        rv.append(v)
-    return rv
-
-# this is not exactly merge, since anything apart from config lang
-# and the fallback lang gets skipped. It's midway between just merging all strings
-# and dropping lang info from the ruleset, or loading all the translations,
-# so that at least untranslated strings can be detected later.
-def merge_extrastrings(mod, left, right):
-    ldict = list_to_dict('type', left)
-    rdict = list_to_dict('type', right)
-
-    def print_count():
-        for lang, sss in ldict.items():
-            print("left: {}/{}, {}".format(lang, sss['type'], len(sss['strings'])))
-        for lang, sss in rdict.items():
-            print("right: {}/{}, {}".format(lang, sss['type'], len(sss['strings'])))
-
-    #print_count()
-
-    for lang in rdict.keys():
-        if lang in ldict.keys():
-            # TODO: detect replacements
-            ldict[lang]['strings'].update(rdict[lang]['strings'])
-            print("extraStrings: updated", lang)
-        elif lang == mod.lang or lang == FALLBACK_LANG:
-            ldict[lang] = { 'type': lang, 'strings': rdict[lang]['strings'] }
-            print("extraStrings: added", lang)
-        else:
-            print("extraStrings: skipped", lang)
-
-    #print_count()
-
-    return list(ldict.values())
-
-def merge_extrasprites(mod, left, right):
-    """ seems like extrasprites' type is actually a type rather than a key.
-
-        soo, extrasprites is a list of dicts .. no dammit. gotta dig moar into ze code.
-        [ {...},
-          {'files': {0: 'Resources/UI/invpaste_empty.png'}, 'height': 16, 'singleImage': True, 'type': 'InvPasteEmpty', 'width': 16},
-          {'files': {-4: 'Resources/Weapons/Terror.png'}, 'height': 96, 'subX': 32, 'subY': 48, 'type': 'BIGOBS.PCK', 'width': 64},
-          {'files': {-5: 'Resources/Weapons/Zombie.png'}, 'height': 48, 'type': 'BIGOBS.PCK', 'width': 32},
-          ]
-        and how tis used?
-
-        mod.cpp has:
-            std::map<std::string, ExtraStrings *> _extraStrings;
-
-            std::map<std::string, Surface*> _surfaces;
-            std::map<std::string, SurfaceSet*> _sets;
-            std::map<std::string, SoundSet*> _sounds;
-            std::map<std::string, Music*> _musics;
-
-        extraSprites yaml parser handler says:
-            std::string type = (*i)["type"].as<std::string>();
-            std::auto_ptr<ExtraSprites> extraSprites(new ExtraSprites());
-            if (type != "TEXTURE.DAT")
-                extraSprites->load(*i, _modOffset);
-            else
-                extraSprites->load(*i, 0);
-            _extraSprites.push_back(std::make_pair(type, extraSprites.release()));
-            _extraSpritesIndex.push_back(type);
-
-        Mod::loadExtraResources() says:
-            if single image:
-                if type not in
-
-
-    """
-    for es in right:
-        es['_mod_index'] = mod.index
-        esfiles = {}
-        for idx, path in es['files'].items():
-            expath = mod.findone(path)
-            #print(mod.root, mod.index, idx, path, expath)
-            if expath is None:
-                sys.exit(0)
-            esfiles[idx] = expath
-        es['files'] = esfiles
-        left.append(es)
-    return left
-
-def merge_extrasounds(mod, left, right):
-    print(" merge_extrasounds(): skipping")
-    return left
-
-def merge(mod_idx, primarykey, left, right, show_diff_for = []):
-    """ drop stuff from left that is marked for deletion in right
-        then replace/update the rest according to the primarykey
-
-        return the values() instead of hash. eww.
-
-        also if primarykey is none, just replace.
-    """
-    if primarykey is None:
-        print("      overwrite all")
-        if type(right) is dict:
-            right['_mod_index'] = mod_idx
-        elif type(right) is list:
-            for it in right:
-                if type(it) is dict:
-                    it['_mod_index'] = mod_idx
-        return right
-    elif callable(primarykey):
-        return primarykey(left, right)
-    left_dict = list_to_dict(primarykey, left)
-    deleted = []
-    for item in right:
-        if 'delete' in item:
-            assert type(item) is dict
-            assert len(item) == 1
-            try:
-                del left_dict[item['delete']]
-                print("      del", item['delete'])
-            except KeyError:
-                print("      del {}: missing".format(item['delete']))
-            deleted.append(item['delete'])
-        else:
-            itype = item[primarykey]
-            if itype in left_dict:
-                print("      mod", itype)
-                if itype in show_diff_for:
-                    print("original: {}\n\n".format(pprint.pformat(left_dict[itype])))
-                    print("update:   {}\n\n".format(pprint.pformat(item)))
-                    left_dict[itype].update(item)
-                    print("new:      {}\n\n".format(pprint.pformat(left_dict[itype])))
-                else:
-                    left_dict[itype].update(item)
-            else:
-                if itype in deleted:
-                    print("      add", itype)
-                left_dict[itype] = item
-            left_dict[itype]['_mod_index'] = mod_idx
-    return dict_to_list(primarykey, left_dict)
-
-def expand_paths(mod, rulename, rule):
-    if rulename == 'globe':
-        if 'data' in rule:
-            rule['data'] = mod.findone(rule['data'])
-            return rule
-    elif rulename == 'fontName':
-        rule = mod.findone(os.path.join('Language',rule)) # dammit, another implicit rule
-        return rule
-    elif rulename == 'cutscenes':
-        for scene in rule:
-            if 'videos' in scene:
-                vidpaths = []
-                for vp in scene['videos']:
-                    vidpaths.append(mod.findone(vp))
-                    print( vidpaths )
-                scene['videos'] = vidpaths
-            if 'slideshow' in scene:
-                for slide in scene['slideshow']['slides']:
-                    slide['imagePath'] = mod.findone(slide['imagePath'])
-                    print( slide['imagePath'] )
-        return rule
-    elif rulename == 'soldiers':
-        for soldier in rule:
-            snames = []
-            for sname in soldier['soldierNames']:
-                if sname == 'delete':
-                    snames = []
-                else:
-                    for fname in mod.findall(sname):
-                        if fname.lower().endswith('.nam'):
-                            snames.append(fname)
-            soldier['soldierNames'] = snames
-        return rule
-    elif rulename == 'terrains':
-        for terrain in rule:
-            if 'delete' in terrain:
-                continue
-            terrain["mapFiles"] = []
-            for mb in terrain['mapBlocks']:
-                terrain["mapFiles"].append({
-                "type": mb["name"],
-                "map": mod.findone("MAPS/" + mb["name"] + ".MAP"),
-                "rmp": mod.findone("ROUTES/" + mb["name"] + ".RMP")})
-            terrain["mapDataFiles"] = []
-            for mds in terrain["mapDataSets"]:
-                terrain["mapDataFiles"].append({
-                    "type" : mds,
-                    "mcd": mod.findone("TERRAIN/" + mds + ".MCD"),
-                    "pck": mod.findone("TERRAIN/" + mds + ".PCK"),
-                    "tab": mod.findone("TERRAIN/" + mds + ".TAB")})
-        return rule
-    else:
-        return rule
-
 def yamdirload_and_merge(mod, ruleset, rul_dir, suffix = '.rul', printdiff = True):
     for d in os.listdir(rul_dir):
         if d.endswith(suffix):
@@ -590,15 +584,7 @@ def yamdirload_and_merge(mod, ruleset, rul_dir, suffix = '.rul', printdiff = Tru
                         ruleset[k] = None
                 #if printdiff:
                     #print("{}: merge '{}'".format(rulpath, k))
-                if k == 'extraStrings':
-                    ruleset[k] = merge_extrastrings(mod, ruleset[k], v)
-                elif k == 'extraSprites':
-                    ruleset[k] = merge_extrasprites(mod, ruleset[k], v)
-                elif k == 'extraSounds':
-                    ruleset[k] = merge_extrasounds(mod, ruleset[k], v)
-                else:
-                    pkey = PRIMARY_KEYS[k]
-                    ruleset[k] = merge(mod.index, PRIMARY_KEYS[k], ruleset[k], v)
+                ruleset[k] = merge(mod.index, PRIMARY_KEYS[k], ruleset[k], v)
         elif False:
             print("Ign", os.path.join(path, d))
 
@@ -733,15 +719,23 @@ def load_vanilla(mod):
     for surf in surfaces:
         surf["_mod_index"] = mod.index
 
-    # load std trans as extraStrings so that there are no extra entity types to merge
-    try:
-        lang = mod.lang
-        trans = yamload(fi(os.path.join('Language', lang + '.yml')))
-    except FileNotFoundError:
-        lang = FALLBACK_LANG
-        trans = yamload(fi(os.path.join('Language', lang + '.yml')))
+    # load common and translations, merge them
+    baseStrings = []
+    extraStrings = []
 
-    return { 'extraSprites': surfaces, 'extraStrings': [{ 'type': lang, 'strings': trans[lang] }], '_palettes': palettes }
+    for fpath in mod.findall(os.path.join('Language', '*.yml')):
+        fname = os.path.basename(fpath)
+        flang = fname[:-4]
+        if 'common' in fpath.lower():
+            print("Loading {} lang base from {}".format(flang, fpath))
+            baseStrings.append({'type': flang, 'strings': yamload(fpath)[flang]})
+        else:
+            print("Loading {} lang master mod from {}".format(flang, fpath))
+            extraStrings.append({'type': flang, 'strings': yamload(fpath)[flang]})
+
+    extraStrings = merge_extrastrings(mod.index, baseStrings, extraStrings)
+
+    return { 'extraSprites': surfaces, 'extraStrings': extraStrings, '_palettes': palettes }
 
 def load(finder):
     config = yamload(finder.config)
@@ -797,7 +791,6 @@ def load(finder):
         if os.path.isdir(rul_dir):
             yamdirload_and_merge(mod, ruleset, rul_dir)
 
-    #ruleset['extraStrings'] = [] # skip for now to ease the load on the editor
     ruleset['_mod_meta'] = []
     for mod in load_order:
         ruleset['_mod_meta'].append({
