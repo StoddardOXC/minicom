@@ -2,8 +2,9 @@
     XCOM1 custom file format loaders.
 
 """
-
 import struct, pprint
+import collections, copy
+from recordclass import recordclass
 
 def load_world_dat(planet_dat):
     "http://www.ufopaedia.org/index.php/WORLD.DAT"
@@ -68,7 +69,6 @@ def load_textures_img(imgfname, subX, subY, surf_load, surf_cut):
         for ix in range(int(w/subX)):
            rv.append(surf_cut(surf, ix*subX, iy*subY, subX, subY))
     return rv
-
 
 def load_geotextures(ruleset, surf_conv, surf_load, surf_cut):
     """ returns patched flat list of suitable converted/loaded surfaces
@@ -135,4 +135,72 @@ def load_pck(pck_path, tab_path, tab_type = 2, w = 32):
         rv.append(raw_data)
     return rv
 
+MapRec = collections.namedtuple('MapRec', 'floor west north ob')
+MapStruct = collections.namedtuple('MapStruct', 'cells height width depth')
+def load_map(map_path):
+    map_data = open(map_path, 'rb').read()
+    eb = (len(map_data) - 3) % 4
+    if eb > 0:
+        print("{}: {} extra bytes".format(map_path, eb))
+    return MapStruct(
+        [MapRec(*rec) for rec in struct.iter_unpack('4B', map_data[3:-eb])],
+        *struct.unpack('3B', map_data[:3]))
+
+MCDRec = recordclass('MCDRec', '''origin Frame LOFT ScanG UFO_Door
+        Stop_LOS No_Floor Big_Wall Gravlift Door Block_Fire Block_Smoke
+        u39 TU_Walk TU_Slide TU_Fly Armor HE_Block Die_MCD Flammable Alt_MCD
+        u48 T_Level P_Level u51 Light_Block Footstep Tile_Type HE_Type
+        HE_Strength Smoke_Blockage Fuel Light_Source Target_Type Xcom_Base u62''')
+
+MCDStruct = struct.Struct("<8s12sH8x12B6Bb13B")
+MCDPatchMap = {
+    'bigWall': 'Big_Wall',
+    'TUWalk': 'TU_Walk',
+    'TUSlide': 'TU_Slide',
+    'TUFly': 'TU_Fly',
+    'deathTile': 'Die_MCD',
+    'terrainHeight': 'T_Level',
+    'specialType': 'Target_Type',
+    'explosive': 'HE_Strength',
+    'armor': 'Armor',
+    'flammability': 'Flammable',
+    'fuel': 'Fuel',
+    'footstepSound': 'Footstep',
+    'HEBlock': 'HE_Block',
+    'noFloor': 'No_Floor',
+    'LOFTS': 'LOFT',
+    'stopLOS': 'Stop_LOS',
+    'objectType': 'Tile_Type',
+}
+def load_mcd(mcd_path, mcd_patch, mcd_offset):
+    mcdp = {}
+    if mcd_patch is not None:
+        for p in mcd_patch:
+            cp = copy.copy(p)
+            del cp['MCDIndex']
+            mcdp[p['MCDIndex']] = dict(((MCDPatchMap[k], v) for k, v in cp.items()))
+    mcdi = 0
+    rv = []
+    for mcd in (MCDRec(None, *i) for i in MCDStruct.iter_unpack(open(mcd_path, 'rb').read())):
+        mcd.Frame = struct.unpack("8B", mcd.Frame)
+        mcd.LOFT = struct.unpack("12B", mcd.LOFT)
+        mcd.origin = "{}:{}".format(mcd_path, mcdi)
+        if mcdi in mcdp:
+            mcd = mcd._replace(**mcdp[mcdi])
+        mcdi +=1
+        rv.append(mcd)
+    return rv
+
+class RouteRec(object):
+    def __init__(self, data):
+        self.y, self.x, self.z = struct.unpack('BBB', data[:3])
+        self.type, self.rank, self.flags, self.reserved, self.priority = struct.unpack('BBB', data[-5:])
+        self.links = list(struct.iter_unpack('BBB', data[3:-5]))
+
+def load_rmp(rmp_path):
+    rmp_data = open(rmp_path, 'rb').read()
+    rv = []
+    for i in range(len(rmp_data)/24):
+        rv.append(RouteRec(rmp_data[i*24:(i+1)*24-1]))
+    return rv
 
