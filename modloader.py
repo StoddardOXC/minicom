@@ -549,6 +549,24 @@ def expand_paths(mod, rulename, rule):
                             snames.append(fname)
             soldier['soldierNames'] = snames
         return rule
+    elif rulename == 'terrains':
+        for terrain in rule:
+            if 'delete' in terrain:
+                continue
+            terrain["mapFiles"] = []
+            for mb in terrain['mapBlocks']:
+                terrain["mapFiles"].append({
+                "type": mb["name"],
+                "map": mod.findone("MAPS/" + mb["name"] + ".MAP"),
+                "rmp": mod.findone("ROUTES/" + mb["name"] + ".RMP")})
+            terrain["mapDataFiles"] = []
+            for mds in terrain["mapDataSets"]:
+                terrain["mapDataFiles"].append({
+                    "type" : mds,
+                    "mcd": mod.findone("TERRAIN/" + mds + ".MCD"),
+                    "pck": mod.findone("TERRAIN/" + mds + ".PCK"),
+                    "tab": mod.findone("TERRAIN/" + mds + ".TAB")})
+        return rule
     else:
         return rule
 
