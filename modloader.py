@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import math, pprint, sys, os, copy, fnmatch
+import math, pprint, sys, os, copy, fnmatch, textwrap
 import yaml
 
 FALLBACK_LANG = 'en-US'
@@ -813,6 +813,24 @@ def main():
     with open(ofname, "w") as f:
         f.write("ruleset = {\n ")
         f.write(pprint.pformat(ruleset, width=320)[1:])
+        f.write(textwrap.dedent("""
+            def get_trans(lang="{lang}", fallback = False):
+                def find_lang(lname):
+                    for ess in ruleset["extraStrings"]:
+                        if ess['type'] == lname:
+                            return ess['strings']
+                    return {{}}
+
+                trans = find_lang(lang)
+                falltrans = find_lang("{fblang}")
+
+                if fallback:
+                    return lambda k : trans.get(k, falltrans.get(k, k))
+                else:
+                    return lambda k : trans.get(k, k)
+
+            """.format(fblang = FALLBACK_LANG,
+                         lang = finder.config['options'].get('language', FALLBACK_LANG))))
 
 if __name__ == '__main__':
     main()
