@@ -790,9 +790,7 @@ def load(finder):
             'name' : mod.name,
             })
 
-    with open("ruleset.py", "w") as f:
-        f.write("ruleset = {\n ")
-        f.write(pprint.pformat(ruleset, width=320)[1:])
+    return ruleset
 
 def main():
     userdir = os.path.join(sys.argv[1], 'user')
@@ -800,11 +798,14 @@ def main():
     cfgdir  = userdir
     ofname = 'ruleset.py' if len(sys.argv) < 3 else sys.argv[2]
 
-
     finder = Finder(cfgdir, userdir, datadir)
     print(finder)
     print(finder.config)
-    load(finder)
+    ruleset = load(finder)
+
+    with open(ofname, "w") as f:
+        f.write("ruleset = {\n ")
+        f.write(pprint.pformat(ruleset, width=320)[1:])
 
 if __name__ == '__main__':
     main()
