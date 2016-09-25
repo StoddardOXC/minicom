@@ -114,13 +114,23 @@ class Finder(object):
         else:
             self.cfgdir = self.cfgdirs[0]
 
+        self.cfgfile = None
+        for d in self.cfgdirs:
+            # case-insensivitise this?
+            cf = os.path.join(d, 'options.cfg')
+            if os.path.isfile(cf):
+                self.cfgfile = cf
+                break
+
+        if self.cfgfile is None:
+            raise FileNotFoundError("options.cfg in {}".format(self.cfgdirs))
+
+        self.config = yamload(self.cfgfile)
+
     def __str__(self):
-        return "cfg={!r} user={!r} data={!r}".format(self.cfgdir, self.userdir, self.datadir)
-        return "cfg={!r} user={!r} data={!r}".format(self.cfgdirs, self.userdirs, self.datadirs)
+        return "cfg={!r} user={!r} data={!r} cfgfile={}".format(self.cfgdir, self.userdir, self.datadir, self.cfgfile)
 
     """ Use cases:
-        - get the config. returns first config found
-          across the defined cfgdirs.
 
         - load mod resources
           - needs mod root
@@ -138,15 +148,6 @@ class Finder(object):
         the former shouldn't touch userdirs at all.
 
     """
-
-    @property
-    def config(self):
-        for d in self.cfgdirs:
-            # case-insensivitise this?
-            cf = os.path.join(d, 'options.cfg')
-            if os.path.isfile(cf):
-                return cf
-        raise FileNotFoundError("options.cfg in {}".format(self.cfgdirs))
 
     def glob(self, pathglob, roots):
         """ Basic case-insensitive search for paths.
@@ -738,14 +739,11 @@ def load_vanilla(mod):
     return { 'extraSprites': surfaces, 'extraStrings': extraStrings, '_palettes': palettes }
 
 def load(finder):
-    config = yamload(finder.config)
-    lang = config['options'].get('language', FALLBACK_LANG)
-
     present_mods = dict((mod.id, mod) for mod in [ ModMeta(p, finder) for p in finder.modlist ])
 
     # gather all active mods into a set
     active_mods = set()
-    for mod in config['mods']:
+    for mod in finder.config['mods']:
         if mod['active']:
             modinfo = present_mods[mod['id']]
             active_mods.add(modinfo)
@@ -776,7 +774,6 @@ def load(finder):
         load_order.append(mod)
         mod.index = mod_index
         mod_index += 1
-        mod.lang = lang # set preferred lang. fallback is 'en-US' (FALLBACK_LANG).
         active_mods.remove(mod)
 
     ruleset = {}
@@ -811,7 +808,6 @@ def main():
 
     finder = Finder(cfgdir, userdir, datadir)
     print(finder)
-    print(finder.config)
     ruleset = load(finder)
 
     with open(ofname, "w") as f:
