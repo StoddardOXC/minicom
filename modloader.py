@@ -460,6 +460,9 @@ def expand_paths(mod, rulename, rule):
                     print( slide['imagePath'] )
     elif rulename == 'soldiers':
         for soldier in rule:
+            if 'soldierNames' not in soldier:
+                # xcom-files has this
+                return rule
             snames = []
             for sname in soldier['soldierNames']:
                 if sname == 'delete':
