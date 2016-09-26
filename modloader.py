@@ -423,7 +423,11 @@ def merge(mod_idx, primarykey, left, right, show_diff_for = []):
                 print("      del {}: missing".format(item['delete']))
             deleted.append(item['delete'])
         else:
-            itype = item[primarykey]
+            try:
+                itype = item[primarykey]
+            except KeyError:
+                print("item '{}' missing primarykey of '{}".format(item, primarykey))
+                raise
             if itype in left_dict:
                 print("      mod", itype)
                 if itype in show_diff_for:
