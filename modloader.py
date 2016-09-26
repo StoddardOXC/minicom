@@ -127,8 +127,20 @@ class Finder(object):
 
         self.config = yamload(self.cfgfile)
 
+        self.dircache = {}
+
     def __str__(self):
         return "cfg={!r} user={!r} data={!r} cfgfile={}".format(self.cfgdir, self.userdir, self.datadir, self.cfgfile)
+
+    def listdir(self, path):
+        """ cache os.listdir() and str.upper() calls"""
+        try:
+            return self.dircache[path]
+        except:
+            dl = [(de, de.upper()) for de in os.listdir(path)]
+            self.dircache[path] = dl
+            return dl
+
 
     """ Use cases:
 
@@ -181,8 +193,8 @@ class Finder(object):
         for pathcomp in components:
             nextroots = []
             for candiroot in candiroots:
-                for direntry in os.listdir(candiroot):
-                    if cmp(direntry.upper(), pathcomp):
+                for direntry, DIRENTRY in self.listdir(candiroot):
+                    if cmp(DIRENTRY, pathcomp):
                         nextroots.append(os.path.join(candiroot, direntry))
             candiroots = nextroots
 
