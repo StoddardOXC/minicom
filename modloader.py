@@ -446,13 +446,14 @@ def expand_paths(mod, rulename, rule):
             if 'videos' in scene:
                 vidpaths = []
                 for vp in scene['videos']:
-                    vidpaths.append(mod.findone(vp))
-                    print( vidpaths )
+                    try:
+                        vidpaths.append(mod.findone(vp))
+                    except FileNotFoundError:
+                        pass
                 scene['videos'] = vidpaths
             if 'slideshow' in scene:
                 for slide in scene['slideshow']['slides']:
                     slide['imagePath'] = mod.findone(slide['imagePath'])
-                    print( slide['imagePath'] )
     elif rulename == 'soldiers':
         for soldier in rule:
             if 'soldierNames' not in soldier:
@@ -566,6 +567,9 @@ PRIMARY_KEYS = {
     'extraSounds': merge_extrasounds,
 
 # None means no merge; replace entirely
+    # TFTD TODO: wtf are those?
+    'transparencyLUTs': None,
+    'soundDefs': None,
     # OXgit Aug14
     'defeatScore': None,
     'defeatFunds': None,
@@ -715,7 +719,6 @@ def load_vanilla(mod):
     # last 16 greyscale and fixup not implemented yet.
 
     # optional stuff, means, skip if not found (think that has to do with tftd)
-
     for fpath in """UFOGRAPH/TAC01.SCR
                     UFOGRAPH/DETBORD.PCK
                     UFOGRAPH/DETBORD2.PCK
@@ -727,7 +730,7 @@ def load_vanilla(mod):
 
     for tftd_surf in def_buncha_files("UFOGRAPH/*.BDY", fail = False):
         print(tftd_surf)
-        fn = os.path.split(tftd_surf["files"][0]).upper()
+        fn = os.path.split(tftd_surf["files"][0])[1].upper()
         _type = fn[:-3]
         if fn.startswith('MAN'):
             _type += 'SPK'
@@ -739,7 +742,8 @@ def load_vanilla(mod):
         surfaces.append(tftd_surf)
 
     # // Load Battlescape inventory: UFOGRAPH/*.SPK
-    surfaces += def_buncha_files("UFOGRAPH/*.SPK")
+    # TODO: must make somehow optional if we're loading TFTD but not otherwise.
+    surfaces += def_buncha_files("UFOGRAPH/*.SPK", fail = False)
 
     # crazy stuff about Options::battleHairBleach
 
