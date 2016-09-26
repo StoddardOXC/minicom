@@ -883,16 +883,19 @@ def load(finder):
 
     return ruleset
 
-def main():
-    userdir = os.path.join(sys.argv[1], 'user')
-    datadir = sys.argv[1]
-    cfgdir  = userdir
-    ofname = 'ruleset.py' if len(sys.argv) < 3 else sys.argv[2]
+def load_ruleset(path):
+    """ load the ruleset from a self-contained installation and return it """
+    userdir = os.path.join(path, 'user')
+    finder = Finder(userdir, userdir, path)
+    print(finder)
+    return load(finder)
 
+def main():
     finder = Finder(cfgdir, userdir, datadir)
     print(finder)
-    ruleset = load(finder)
+    ruleset = load_ruleset(sys.argv[1])
 
+    ofname = 'ruleset.py' if len(sys.argv) < 3 else sys.argv[2]
     with open(ofname, "w") as f:
         f.write("ruleset = {\n ")
         f.write(pprint.pformat(ruleset, width=144)[1:])
