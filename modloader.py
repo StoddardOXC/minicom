@@ -213,14 +213,15 @@ class Finder(object):
             yield modpath
 
 class ModMeta(object):
-    """ mod metadata container plus couple helper functions """
+    """ mod metadata container plus a couple helper functions """
     def __init__(self, path, finder):
         self.root = path
         self.name = os.path.basename(path)
         self.id = self.name
         self.author = "unknown author"
         self.description = "No description"
-        self.master = "xcom1"
+        self.masterID = "xcom1"
+        self.master = None
         self.isMaster = False
         self.loadResources = []
         self.version = "1.0"
@@ -233,7 +234,9 @@ class ModMeta(object):
             self._bump_mtime(md_path)
             # optional fields
             self.id = md.get("id", self.id)
-            self.master = md.get("master", None)
+            self.masterID = md.get("master", None)
+            if self.masterID == '*':
+                self.masterID = None
             self.isMaster = md.get("isMaster", False)
             self.extResDirs = md.get("loadResources", [])
             # required fields
@@ -260,20 +263,30 @@ class ModMeta(object):
             self.mtime = mt
 
     def __str__(self):
-        return "id={} master={} name={} version={} root={} erd={}".format(
-            self.id, self.master, self.name, self.version, self.root, self.extResDirs)
+        return "id='{}' master='{}' name='{}' version='{}' root='{}' erd={}".format(
+            self.id, self.masterID, self.name, self.version, self.root, self.extResDirs)
 
     __repr__ = __str__
 
     def findall(self, pathglob):
-        rv = self.finder.erdglob(pathglob, self.extResDirs) if len(self.extResDirs) > 0 else []
-        return self.finder.glob(pathglob, [self.root]) + rv
+        self_list = self.finder.glob(pathglob, [self.root])
+        if len(self_list) > 0:
+            return self_list
+        erd_list = self.finder.erdglob(pathglob, self.extResDirs) if len(self.extResDirs) > 0 else []
+        if len(erd_list) > 0:
+            return erd_list
+        return self.master.findall(pathglob) if self.master is not None else []
+
+        rv = self_list + erd_list + master_list
+        if pathglob.endswith('/'):
+            print(self.id, pathglob, self.root, erd_list, master_list, self_list, rv)
+        return rv
 
     def findone(self, pathglob):
         try:
             return self.findall(pathglob)[0]
         except IndexError:
-            raise FileNotFoundError("finder={} mod_root={} pathglob={}".format(self.finder, self.root, pathglob))
+            raise FileNotFoundError("finder=({}) mod_root={} pathglob={}".format(self.finder, self.root, pathglob))
 
 class ConstraintViolation(Exception):
     pass
@@ -748,48 +761,82 @@ def load_vanilla(mod):
 
 def load(finder):
     present_mods = dict((mod.id, mod) for mod in [ ModMeta(p, finder) for p in finder.modlist ])
+    """ Mod dependencies
 
-    # gather all active mods into a set
-    active_mods = set()
-    for mod in finder.config['mods']:
-        if mod['active']:
-            modinfo = present_mods[mod['id']]
-            active_mods.add(modinfo)
-            if modinfo.master not in (None, '*'):
-                master_mod = present_mods[modinfo.master]
-                if not master_mod.isMaster:
-                    raise Exception("MasterModIsNotAMasterError: {} is not a master as {} expects".format(
-                                        master_mod.id, modinfo.id))
-                active_mods.add(master_mod)
+        mod can have isMaster attribute . This displays it as a 'game type' in the options screen.
+        the list below then displays only the mods that have the selected mod as the master.
+
+        Engine/Options.cpp:585
+            // add in any new mods picked up from the scan and ensure there is but a single
+            // master active
+
+        mod can have master attribute. this points to some other mod this mod is supposed to mod.
+        so it must be loaded after all its dependency has been loaded.
+        a master of '*' is equivalent to no master at all (Engine/ModInfo.cpp:61)
+
+        Engine/Options.cpp:717
+            // if this is a master but it has a master of its own, allow it to
+            // chainload the "super" master, including its rulesets
+            if (modInfo.isMaster() && !modInfo.getMaster().empty())
+
+    """
+
+
+    # gather all active mods into two sets. master mod is separate.
+    active_mods = {}
+    mastermod = None # active master. there can be only one.
+    for modrec in finder.config['mods']:
+        if modrec['active']:
+            mod = present_mods[modrec['id']]
+            # assert a single master
+            if mod.isMaster:
+                if mastermod is not None:
+                    raise Exception("Two masters active: {} and {}".format(mastermod, mod))
+                mastermod = mod
+            active_mods[mod.id] = mod
+
+    # link up the master mod with its master chain
+    # parts might be inactive, so activate them.
+    mm = mastermod
+    while mm.masterID is not None:
+        if not mm.isMaster:
+            raise WTF
+        active_mods[mm.masterID] = present_mods[mm.masterID]
+        mm.master = present_mods[mm.masterID]
+        mm = mm.master
+
+
+    # link up with masters
+    for mod in active_mods.values():
+        if mod.masterID is not None:
+            mod.master = active_mods[mod.masterID]
 
     # resolve dependencies into a load order
-    def find_least_dependent(modset, masters):
-        for mod in modset:
-            if mod.master is None and mod.isMaster:
-                return mod
-            elif mod.master == '*':
-                if len(masters) > 0:
-                    return mod
-            elif mod.master in map(lambda x: x.id, masters):
-                return mod
-
-        raise Exception("RequiredMasterMissing: mod.master={} load_order=[{}]".format(
-                            mod.master, ','.join(map(lambda x: x.id, masters))))
     load_order = []
+    def find_least_dependent(active_mods, load_order):
+        for mod in active_mods.values():
+            if mod.master is None:
+                return mod
+            if mod.master in load_order:
+                return mod
+        raise Exception("RequiredMasterMissing: mod.master={} load_order=[{}]".format(
+                            mod.masterID, ','.join(map(lambda x: x.id, load_order))))
+
     mod_index = 0
     while len(active_mods) > 0:
         mod = find_least_dependent(active_mods, load_order)
         load_order.append(mod)
         mod.index = mod_index
         mod_index += 1
-        active_mods.remove(mod)
+        del active_mods[mod.id]
 
     ruleset = {}
     for mod in load_order:
-        print("\nLoading {}, extResDirs={}".format(mod.root, mod.extResDirs))
-        if len(mod.extResDirs) > 0:
-            if len(ruleset) > 0:
-                raise WTF
+        print("\nLoading '{}' name='{}' from '{}'".format(mod.id,  mod.name, mod.root))
+        # the topmost master mod, one of xcom1 or xcom2 is:
+        if mod.isMaster and mod.master is None:
+            if mod.id not in ('xcom1', 'xcom2'):
+                raise Exception("masterless master mod {}".format(mod))
             ruleset = load_vanilla(mod)
         yamdirload_and_merge(mod, ruleset, mod.root)
         rul_dir = os.path.join(mod.root, 'Ruleset')
