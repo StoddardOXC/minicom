@@ -324,17 +324,8 @@ def merge_extrastrings(mod_idx, left, right):
     ldict = list_to_dict('type', left)
     rdict = list_to_dict('type', right)
 
-    def print_count():
-        for lang, sss in ldict.items():
-            print("left: {}/{}, {}".format(lang, sss['type'], len(sss['strings'])))
-        for lang, sss in rdict.items():
-            print("right: {}/{}, {}".format(lang, sss['type'], len(sss['strings'])))
-
-    #print_count()
-
     for lang in rdict.keys():
         if lang in ldict.keys():
-            # TODO: detect replacements
             ldict[lang]['strings'].update(rdict[lang]['strings'])
             print("extraStrings: updated", lang)
         else:
@@ -775,21 +766,24 @@ def load_vanilla(mod):
     for surf in surfaces:
         surf["_mod_index"] = mod.index
 
-    # load common and translations, merge them
+    # load common and standard strings, merge them
     baseStrings = []
-    extraStrings = []
+    commonStrings = []
 
     for fpath in mod.findall(os.path.join('Language', '*.yml')):
         fname = os.path.basename(fpath)
-        flang = fname[:-4]
-        if 'common' in fpath.lower():
-            print("Loading {} lang base from {}".format(flang, fpath))
-            baseStrings.append({'type': flang, 'strings': yamload(fpath)[flang]})
-        else:
-            print("Loading {} lang master mod from {}".format(flang, fpath))
-            extraStrings.append({'type': flang, 'strings': yamload(fpath)[flang]})
+        translation = yamload(fpath)
+        print("Loading strings from {}".format(fpath))
+        for lang, strings in translation.items():
+            es = {'type': lang, 'strings': strings}
+            print("lang {} strings {} of {}".format(lang, type(strings), len(strings)))
 
-    extraStrings = merge_extrastrings(mod.index, baseStrings, extraStrings)
+        if 'common' in fpath.lower():
+            baseStrings.append(es)
+        else:
+            commonStrings.append(es)
+
+    extraStrings = merge_extrastrings(mod.index, baseStrings, commonStrings)
 
     return { 'extraSprites': surfaces, 'extraStrings': extraStrings, '_palettes': palettes }
 
