@@ -528,6 +528,9 @@ PRIMARY_KEYS = {
     'extraSounds': merge_extrasounds,
 
 # None means no merge; replace entirely
+    # OXgit Aug14
+    'defeatScore': None,
+    'defeatFunds': None,
     # 3.2 too? None for now, need investigation
     'extended': None,
     # appeared in 3.2
