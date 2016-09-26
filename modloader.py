@@ -482,17 +482,32 @@ def expand_paths(mod, rulename, rule):
                 continue
             terrain["mapFiles"] = []
             for mb in terrain['mapBlocks']:
-                terrain["mapFiles"].append({
-                "type": mb["name"],
-                "map": mod.findone("MAPS/" + mb["name"] + ".MAP"),
-                "rmp": mod.findone("ROUTES/" + mb["name"] + ".RMP")})
+                try:
+                    terrain["mapFiles"].append({
+                        "type": mb["name"],
+                        "map": mod.findone("MAPS/" + mb["name"] + ".MAP"),
+                        "rmp": mod.findone("ROUTES/" + mb["name"] + ".RMP")})
+                except FileNotFoundError as e:
+                    terrain["mapFiles"].append({
+                        "type": mb["name"],
+                        "map": None,
+                        "rmp": None})
+                    print(e)
             terrain["mapDataFiles"] = []
             for mds in terrain["mapDataSets"]:
-                terrain["mapDataFiles"].append({
-                    "type" : mds,
-                    "mcd": mod.findone("TERRAIN/" + mds + ".MCD"),
-                    "pck": mod.findone("TERRAIN/" + mds + ".PCK"),
-                    "tab": mod.findone("TERRAIN/" + mds + ".TAB")})
+                try:
+                    terrain["mapDataFiles"].append({
+                        "type" : mds,
+                        "mcd": mod.findone("TERRAIN/" + mds + ".MCD"),
+                        "pck": mod.findone("TERRAIN/" + mds + ".PCK"),
+                        "tab": mod.findone("TERRAIN/" + mds + ".TAB")})
+                except FileNotFoundError as e:
+                    terrain["mapDataFiles"].append({
+                        "type": mds,
+                        "mcd": None,
+                        "pck": None,
+                        "tab": None})
+                    print(e)
     elif rulename == 'extraSprites':
         for extrasprite in rule:
             esfiles = {}
