@@ -167,7 +167,7 @@ class Finder(object):
             remnant = dirname
 
         # about 5x speedup on xpiratez if we don't call fnmatch when not needed
-        if '?' in pathglob or '*' in pathglob or '[' in pathglob:
+        if '?' in pathglob or '*' in pathglob or '[' in pathglob or pathglob.endswith('/'):
             def cmp(a, b):
                 return fnmatch.fnmatch(a, b)
         else:
@@ -448,6 +448,10 @@ def expand_paths(mod, rulename, rule):
         for terrain in rule:
             if 'delete' in terrain:
                 continue
+            if 'mapBlocks' not in terrain:
+                # wtf is a terrain w/o mapblocks?? aha, a merged one.
+                # if so, do nothing. merge should just update-merge.
+                continue
             terrain["mapFiles"] = []
             for mb in terrain['mapBlocks']:
                 terrain["mapFiles"].append({
@@ -465,10 +469,11 @@ def expand_paths(mod, rulename, rule):
         for extrasprite in rule:
             esfiles = {}
             for idx, path in extrasprite['files'].items():
-                expath = mod.findone(path)
-                if expath is None:
-                    raise WTF
-                esfiles[idx] = expath
+                # obscure crap about cobbling up a spritesheet from a dir
+                expaths = mod.findall(path)
+                if len(expaths) == 1:
+                    expaths = expaths[0]
+                esfiles[idx] = expaths
             extrasprite['files'] = esfiles
     return rule
 
