@@ -141,7 +141,10 @@ def load_map(map_path):
     map_data = open(map_path, 'rb').read()
     eb = (len(map_data) - 3) % 4
     if eb > 0:
-        print("{}: {} extra bytes".format(map_path, eb))
+        #print("{}: {} extra bytes".format(map_path, eb))
+        # many maps seem to have an extra byte tacked on.
+        # must be a bug in some editor
+        pass
     return MapStruct(
         [MapRec(*rec) for rec in struct.iter_unpack('4B', map_data[3:-eb])],
         *struct.unpack('3B', map_data[:3]))
