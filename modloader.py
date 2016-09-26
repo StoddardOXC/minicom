@@ -808,36 +808,43 @@ def load(finder):
             if (modInfo.isMaster() && !modInfo.getMaster().empty())
 
     """
+    mastermod = None # active master. there can only be one.
+    # find the currently active master mod
+    for modrec in finder.config['mods']:
+        mod = present_mods[modrec['id']]
+        if modrec['active'] and mod.isMaster:
+            if mastermod is not None:
+                raise Exception("Two masters active: {} and {}".format(mastermod, mod))
+            mastermod = mod
 
-
-    # gather all active mods into two sets. master mod is separate.
+    # gather all active mods that depend on the currently active master mod
     active_mods = {}
-    mastermod = None # active master. there can be only one.
     for modrec in finder.config['mods']:
         if modrec['active']:
             mod = present_mods[modrec['id']]
-            # assert a single master
-            if mod.isMaster:
-                if mastermod is not None:
-                    raise Exception("Two masters active: {} and {}".format(mastermod, mod))
-                mastermod = mod
-            active_mods[mod.id] = mod
+            if mod.masterID == mastermod.id or mod.masterID is None:
+                active_mods[mod.id] = mod
 
-    # link up the master mod with its master chain
+    # link up the master mod with its dependency chain
     # parts might be inactive, so activate them.
     mm = mastermod
-    while mm.masterID is not None:
-        if not mm.isMaster:
+    while mm.masterID is not None and mm.masterID not in active_mods:
+        if not mm.isMaster: # masters can only depend on masters?
             raise WTF
         active_mods[mm.masterID] = present_mods[mm.masterID]
         mm.master = present_mods[mm.masterID]
         mm = mm.master
 
+    # add the master mod into the active set
+    active_mods[mastermod.id] = mastermod
 
-    # link up with masters
-    for mod in active_mods.values():
+    # link up all mods with their dependencies
+    for mod in list(active_mods.values()):
         if mod.masterID is not None:
-            mod.master = active_mods[mod.masterID]
+            if mod.masterID not in active_mods:
+                del active_mods[mod.id]
+            else:
+                mod.master = active_mods[mod.masterID]
 
     # resolve dependencies into a load order
     load_order = []
@@ -857,6 +864,8 @@ def load(finder):
         mod.index = mod_index
         mod_index += 1
         del active_mods[mod.id]
+
+    print("\nload_order:\n ", '\n  '.join(map(str, load_order)))
 
     ruleset = {}
     for mod in load_order:
