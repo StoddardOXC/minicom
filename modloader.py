@@ -820,7 +820,7 @@ def main():
 
     with open(ofname, "w") as f:
         f.write("ruleset = {\n ")
-        f.write(pprint.pformat(ruleset, width=320)[1:])
+        f.write(pprint.pformat(ruleset, width=144)[1:])
         f.write(textwrap.dedent("""
             def get_trans(lang="{lang}", fallback = False):
                 def find_lang(lname):
