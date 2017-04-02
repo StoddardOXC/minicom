@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import math, pprint, sys, os, copy, fnmatch, textwrap
+import math, pprint, sys, os, copy, fnmatch, textwrap, pickle
 import yaml
 
 FALLBACK_LANG = 'en-US'
@@ -235,10 +235,15 @@ class ModMeta(object):
         self.masterID = "xcom1"
         self.master = None
         self.isMaster = False
+        self.isActive = False
         self.loadResources = []
         self.version = "1.0"
         self.mtime = 0
         self.extResDirs = []
+
+        for md in finder.config.get("mods", []):
+            if md['id'] == self.id:
+                self.isActive = md['active']
 
         md_path = os.path.join(path, 'metadata.yml')
         try:
@@ -279,6 +284,21 @@ class ModMeta(object):
             self.id, self.masterID, self.name, self.version, self.root, self.extResDirs)
 
     __repr__ = __str__
+
+    def as_dict(self):
+        return {
+            'root': self.root,
+            'extResDirs': self.extResDirs,
+            'id': self.id,
+            'index': self.index,
+            'name' : self.name,
+            'version': self.version,
+            'author': self.author,
+            'description': self.description,
+            'master': self.masterID,
+            'isMaster': self.isMaster,
+            'isActive': self.isActive
+        }
 
     def findall(self, pathglob):
         self_list = self.finder.glob(pathglob, [self.root])
@@ -567,6 +587,28 @@ PRIMARY_KEYS = {
     'extraSounds': merge_extrasounds,
 
 # None means no merge; replace entirely
+
+    # as of 3.7
+    'bughuntRank': None,
+    'bughuntMinTurn': None,
+    'bughuntMaxEnemies': None,
+    'bughuntRank': None,
+    'bughuntLowMorale': None,
+    'bughuntTimeUnitsLeft': None,
+    'lighting': None,
+    'surrenderMode': None,
+    'ufoGlancingHitThreshold': None,
+    'ufoBeamWidthParameter': None,
+    'ufoTractorBeamSizeModifier': None,
+    'pilotBraveryThresholds': None,
+    'fixedUserOptions': None,
+    'minReactionAccuracy': None,
+    'soldiersPerColonel': None,
+    'soldiersPerCaptain': None,
+    'soldiersPerSergeant': None,
+    'soldiersPerCommander': None,
+    'performanceBonusFactor': None,
+
     # TFTD TODO: wtf are those?
     'transparencyLUTs': None,
     'soundDefs': None,
@@ -873,7 +915,7 @@ def load(finder):
 
     ruleset = {}
     for mod in load_order:
-        print("\nLoading '{}' name='{}' from '{}'".format(mod.id,  mod.name, mod.root))
+        print("\nLoading '{}' name='{}' '{}' from '{}'".format(mod.id,  mod.name, mod.version, mod.root))
         # the topmost master mod, one of xcom1 or xcom2 is:
         if mod.isMaster and mod.master is None:
             if mod.id not in ('xcom1', 'xcom2'):
@@ -886,14 +928,8 @@ def load(finder):
 
     ruleset['_mod_meta'] = []
     for mod in load_order:
-        ruleset['_mod_meta'].append({
-            'root': mod.root,
-            'extResDirs': mod.extResDirs,
-            'id': mod.id,
-            'index': mod.index,
-            'name' : mod.name,
-            })
-
+        ruleset['_mod_meta'].append(mod.as_dict())
+    ruleset['_config'] = finder.config
     return ruleset
 
 def load_ruleset(path):
@@ -904,10 +940,7 @@ def load_ruleset(path):
     return load(finder)
 
 def main():
-    finder = Finder(cfgdir, userdir, datadir)
-    print(finder)
     ruleset = load_ruleset(sys.argv[1])
-
     ofname = 'ruleset.py' if len(sys.argv) < 3 else sys.argv[2]
     with open(ofname, "w") as f:
         f.write("ruleset = {\n ")
@@ -929,7 +962,21 @@ def main():
                     return lambda k : trans.get(k, k)
 
             """.format(fblang = FALLBACK_LANG,
-                         lang = finder.config['options'].get('language', FALLBACK_LANG))))
+                         lang = ruleset['_config']['options'].get('language', FALLBACK_LANG))))
+    print("\nwrote {}".format(ofname))
+
+    pfname = ofname[:-3] + '.pickle'
+    pickle.dump(ruleset, open(pfname, "wb"))
+    print("wrote {}".format(pfname))
+
+    try:
+        import msgpack
+        ofname = ofname[:-3] + '.msgp'
+        msgpack.pack(ruleset, open(ofname, "wb"))
+    except ImportError:
+        print("msgpack is not installed, skipped.")
+    else:
+        print("wrote {}".format(ofname))
 
 if __name__ == '__main__':
     main()
