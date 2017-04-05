@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import math, pprint, sys, os, copy, fnmatch, textwrap, pickle
-import yaml
+import yaml, msgpack
 
 FALLBACK_LANG = 'en-US'
 
@@ -455,6 +455,40 @@ def merge(mod_idx, primarykey, left, right, show_diff_for = []):
             left_dict[itype]['_mod_index'] = mod_idx
     return dict_to_list(primarykey, left_dict)
 
+def expand_map_paths(mod, terradef):
+    if 'mapBlocks' not in terradef:
+        # wtf is a terrain w/o mapblocks?? aha, a merged one.
+        # if so, do nothing. merge should just update-merge.
+        return
+    terradef["mapFiles"] = []
+    for mb in terradef['mapBlocks']:
+        try:
+            terradef["mapFiles"].append({
+                "type": mb["name"],
+                "map": mod.findone("MAPS/" + mb["name"] + ".MAP"),
+                "rmp": mod.findone("ROUTES/" + mb["name"] + ".RMP")})
+        except FileNotFoundError as e:
+            terradef["mapFiles"].append({
+                "type": mb["name"],
+                "map": None,
+                "rmp": None})
+            print(e)
+    terradef["mapDataFiles"] = []
+    for mds in terradef["mapDataSets"]:
+        try:
+            terradef["mapDataFiles"].append({
+                "type" : mds,
+                "mcd": mod.findone("TERRAIN/" + mds + ".MCD"),
+                "pck": mod.findone("TERRAIN/" + mds + ".PCK"),
+                "tab": mod.findone("TERRAIN/" + mds + ".TAB")})
+        except FileNotFoundError as e:
+            terradef["mapDataFiles"].append({
+                "type": mds,
+                "mcd": None,
+                "pck": None,
+                "tab": None})
+            print(e)
+
 def expand_paths(mod, rulename, rule):
     if rulename == 'globe':
         if 'data' in rule:
@@ -490,40 +524,16 @@ def expand_paths(mod, rulename, rule):
             soldier['soldierNames'] = snames
     elif rulename == 'terrains':
         for terrain in rule:
-            if 'delete' in terrain:
+            expand_map_paths(mod, terrain)
+    elif rulename == 'crafts' or rulename == 'ufos':
+        for craft in rule:
+            if 'delete' in craft:
                 continue
-            if 'mapBlocks' not in terrain:
-                # wtf is a terrain w/o mapblocks?? aha, a merged one.
-                # if so, do nothing. merge should just update-merge.
-                continue
-            terrain["mapFiles"] = []
-            for mb in terrain['mapBlocks']:
-                try:
-                    terrain["mapFiles"].append({
-                        "type": mb["name"],
-                        "map": mod.findone("MAPS/" + mb["name"] + ".MAP"),
-                        "rmp": mod.findone("ROUTES/" + mb["name"] + ".RMP")})
-                except FileNotFoundError as e:
-                    terrain["mapFiles"].append({
-                        "type": mb["name"],
-                        "map": None,
-                        "rmp": None})
-                    print(e)
-            terrain["mapDataFiles"] = []
-            for mds in terrain["mapDataSets"]:
-                try:
-                    terrain["mapDataFiles"].append({
-                        "type" : mds,
-                        "mcd": mod.findone("TERRAIN/" + mds + ".MCD"),
-                        "pck": mod.findone("TERRAIN/" + mds + ".PCK"),
-                        "tab": mod.findone("TERRAIN/" + mds + ".TAB")})
-                except FileNotFoundError as e:
-                    terrain["mapDataFiles"].append({
-                        "type": mds,
-                        "mcd": None,
-                        "pck": None,
-                        "tab": None})
-                    print(e)
+            try:
+                expand_map_paths(mod, craft['battlescapeTerrainData'])
+            except KeyError:
+                print("     {} missing terrain data".format(craft['type']))
+
     elif rulename == 'extraSprites':
         for extrasprite in rule:
             esfiles = {}
@@ -939,9 +949,85 @@ def load_ruleset(path):
     print(finder)
     return load(finder)
 
-def main():
-    ruleset = load_ruleset(sys.argv[1])
-    ofname = 'ruleset.py' if len(sys.argv) < 3 else sys.argv[2]
+def for_mapview(rs, ofname="terrains"):
+    """ preprocess terrain defs for the rust deserealizer """
+    msd = {}
+    for ms in rs['mapScripts']:
+        break
+
+    rv = {}
+    seq = copy.copy(rs['terrains'])
+    for craft in rs['crafts']:
+        if 'battlescapeTerrainData' in craft:
+            seq.append(craft['battlescapeTerrainData'])
+    for rt in rs['terrains'] + seq:
+        rst = {}
+
+        mapfiles = {}
+        for mapf in rt['mapFiles']:
+            mapfiles[mapf['type']] = mapf
+
+        rst['map_blocks'] = {}
+        for mb in rt['mapBlocks']:
+            name = mb['name']
+            if 'groups' in mb:
+                if type(mb['groups']) == list:
+                    groups = mb['groups']
+                else:
+                    groups = [mb['groups']]
+            else:
+                groups = []
+            rst['map_blocks'][name] = {
+                'name': name,
+                'length': mb['length'],
+                'width': mb['width'],
+                'groups': groups,
+                'map':  os.path.realpath(mapfiles[name]['map']),
+                'rmp': os.path.realpath(mapfiles[name]['rmp']) }
+
+        rst['map_data_sets'] = copy.deepcopy(rt['mapDataFiles'])
+        for mdf in rst['map_data_sets']:
+            mdf['name'] = mdf['type']
+            mdf['mcd'] = os.path.realpath(mdf['mcd'])
+            mdf['pck'] = os.path.realpath(mdf['pck'])
+            mdf['tab'] = os.path.realpath(mdf['tab'])
+            del mdf['type']
+        rst['name'] = rt['name']
+        rv[rt['name']] = rst
+
+    rv = { 'terrains': rv }
+
+    for es in rs['extraSprites']:
+        if es['type'] == 'SCANG.DAT':
+            rv['scang'] = os.path.realpath(es['files'][0])
+    rv['palette'] = rs['_palettes']['PAL_BATTLESCAPE']
+    rv['palette']['file'] = os.path.realpath(rv['palette']['file'])
+
+    mcdp_map = {}
+    for mcdp in sorted(rs['MCDPatches'], key = lambda i: i['_mod_index']):
+        if mcdp['type'] in mcdp_map:
+            #print(mcpd['_mod_index'], mcdp['type'], "merged")
+            mcdp_map[mcdp['type']].update(mcdp)
+        else:
+            #print(mcdp['_mod_index'], mcdp['type'], "initial")
+            mcdp_map[mcdp['type']] = mcdp
+
+    rv['mcd_patches'] = {}
+    for k,ov in mcdp_map.items():
+        v = copy.deepcopy(ov)
+        del v['type']
+        del v['_mod_index']
+        rv['mcd_patches'][k] = v['data']
+
+    with open(ofname + ".py", "w") as f:
+        f.write("terrains = {\n")
+        f.write(pprint.pformat(rv, width=144)[1:])
+    print("wrote", ofname + ".py")
+
+    msgpack.pack(rv, open(ofname + ".msgp", "wb"))
+    print("wrote", ofname + ".msgp")
+
+def write_ruleset(ruleset, ofname):
     with open(ofname, "w") as f:
         f.write("ruleset = {\n ")
         f.write(pprint.pformat(ruleset, width=144)[1:])
@@ -977,6 +1063,16 @@ def main():
         print("msgpack is not installed, skipped.")
     else:
         print("wrote {}".format(ofname))
+
+def main():
+    if len(sys.argv) == 1:
+        import ruleset
+        for_mapview(ruleset.ruleset)
+    else:
+        indir = sys.argv[1]
+        ofname = 'ruleset.py' if len(sys.argv) < 3 else sys.argv[2]
+        ruleset = load_ruleset(indir)
+        write_ruleset(ruleset, ofname)
 
 if __name__ == '__main__':
     main()
