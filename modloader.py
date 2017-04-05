@@ -1055,14 +1055,9 @@ def write_ruleset(ruleset, ofname):
     pickle.dump(ruleset, open(pfname, "wb"))
     print("wrote {}".format(pfname))
 
-    try:
-        import msgpack
-        ofname = ofname[:-3] + '.msgp'
-        msgpack.pack(ruleset, open(ofname, "wb"))
-    except ImportError:
-        print("msgpack is not installed, skipped.")
-    else:
-        print("wrote {}".format(ofname))
+    ofname = ofname[:-3] + '.msgp'
+    msgpack.pack(ruleset, open(ofname, "wb"))
+    print("wrote {}".format(ofname))
 
 def main():
     if len(sys.argv) == 1:
