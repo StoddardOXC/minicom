@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
-import math, pprint, sys, os, copy, fnmatch, textwrap, pickle
+import math, pprint, sys, os, copy, fnmatch, textwrap, pickle, argparse
+import importlib.util
 import yaml, msgpack
 
 FALLBACK_LANG = 'en-US'
+TODO=False
 
 def yamload(path):
     return yaml.load(open(path, "rb"), Loader = yaml.CLoader)
@@ -949,26 +951,27 @@ def load_ruleset(path):
     print(finder)
     return load(finder)
 
-def for_mapview(rs, ofname="terrains"):
+def write_rusted_terrains(ruleset, ofname="terrains"):
     """ preprocess terrain defs for the rust deserealizer """
-    msd = {}
-    for ms in rs['mapScripts']:
-        break
+    # todo: mapscripts.
 
-    rv = {}
-    seq = copy.copy(rs['terrains'])
-    for craft in rs['crafts']:
+    all_terrain_defs = copy.copy(ruleset['terrains'])
+    for craft in ruleset['crafts'] + ruleset['ufos']:
         if 'battlescapeTerrainData' in craft:
-            seq.append(craft['battlescapeTerrainData'])
-    for rt in rs['terrains'] + seq:
-        rst = {}
+            all_terrain_defs.append(craft['battlescapeTerrainData'])
+
+    terrains = {}
+
+    for terrain_def in all_terrain_defs:
+        terrain_name = terrain_def['name']
+        terrain = {}
 
         mapfiles = {}
-        for mapf in rt['mapFiles']:
+        for mapf in terrain_def['mapFiles']:
             mapfiles[mapf['type']] = mapf
 
-        rst['map_blocks'] = {}
-        for mb in rt['mapBlocks']:
+        terrain['map_blocks'] = {}
+        for mb in terrain_def['mapBlocks']:
             name = mb['name']
             if 'groups' in mb:
                 if type(mb['groups']) == list:
@@ -977,7 +980,8 @@ def for_mapview(rs, ofname="terrains"):
                     groups = [mb['groups']]
             else:
                 groups = []
-            rst['map_blocks'][name] = {
+
+            terrain['map_blocks'][name] = {
                 'name': name,
                 'length': mb['length'],
                 'width': mb['width'],
@@ -985,26 +989,27 @@ def for_mapview(rs, ofname="terrains"):
                 'map':  os.path.realpath(mapfiles[name]['map']),
                 'rmp': os.path.realpath(mapfiles[name]['rmp']) }
 
-        rst['map_data_sets'] = copy.deepcopy(rt['mapDataFiles'])
-        for mdf in rst['map_data_sets']:
+        terrain['map_data_sets'] = copy.deepcopy(terrain_def['mapDataFiles'])
+        for mdf in terrain['map_data_sets']:
             mdf['name'] = mdf['type']
             mdf['mcd'] = os.path.realpath(mdf['mcd'])
             mdf['pck'] = os.path.realpath(mdf['pck'])
             mdf['tab'] = os.path.realpath(mdf['tab'])
             del mdf['type']
-        rst['name'] = rt['name']
-        rv[rt['name']] = rst
 
-    rv = { 'terrains': rv }
+        terrains[terrain_name] = terrain
 
-    for es in rs['extraSprites']:
+    rv = { 'terrains': terrains }
+
+    for es in ruleset['extraSprites']:
         if es['type'] == 'SCANG.DAT':
             rv['scang'] = os.path.realpath(es['files'][0])
-    rv['palette'] = rs['_palettes']['PAL_BATTLESCAPE']
+
+    rv['palette'] = ruleset['_palettes']['PAL_BATTLESCAPE']
     rv['palette']['file'] = os.path.realpath(rv['palette']['file'])
 
     mcdp_map = {}
-    for mcdp in sorted(rs['MCDPatches'], key = lambda i: i['_mod_index']):
+    for mcdp in sorted(ruleset['MCDPatches'], key = lambda i: i['_mod_index']):
         if mcdp['type'] in mcdp_map:
             #print(mcpd['_mod_index'], mcdp['type'], "merged")
             mcdp_map[mcdp['type']].update(mcdp)
@@ -1013,11 +1018,20 @@ def for_mapview(rs, ofname="terrains"):
             mcdp_map[mcdp['type']] = mcdp
 
     rv['mcd_patches'] = {}
-    for k,ov in mcdp_map.items():
+    for k, ov in mcdp_map.items():
         v = copy.deepcopy(ov)
         del v['type']
         del v['_mod_index']
         rv['mcd_patches'][k] = v['data']
+
+    if TODO:
+        exs = {}
+        for es in sorted(ruleset['extraSprites'], key = lambda i: i['_mod_index']):
+            if es['type'] in exs:
+                print("dunno how to merge extraSprites for {}".format(es['type']))
+            else:
+                exs[es['type']] = copy.deepcopy(es)
+                del exs[es['type']]['type']
 
     with open(ofname + ".py", "w") as f:
         f.write("terrains = {\n")
@@ -1027,47 +1041,82 @@ def for_mapview(rs, ofname="terrains"):
     msgpack.pack(rv, open(ofname + ".msgp", "wb"))
     print("wrote", ofname + ".msgp")
 
-def write_ruleset(ruleset, ofname):
-    with open(ofname, "w") as f:
-        f.write("ruleset = {\n ")
-        f.write(pprint.pformat(ruleset, width=144)[1:])
-        f.write(textwrap.dedent("""
-            def get_trans(lang="{lang}", fallback = False):
-                def find_lang(lname):
-                    for ess in ruleset["extraStrings"]:
-                        if ess['type'] == lname:
-                            return ess['strings']
-                    return {{}}
+def write_ruleset(ruleset, ofname, imported_from=None, force=False, msgpacked=True, pickled=False):
+    basename = ofname.rsplit('.', 1)[0]
+    ofname = basename + ".py"
 
-                trans = find_lang(lang)
-                falltrans = find_lang("{fblang}")
+    # don't overwrite the module we just imported by default - slows down the next import
+    if ( imported_from is not None
+         and not force
+         and os.path.abspath(imported_from) == os.path.abspath(ofname)):
+        print("not overwriting {}".format(imported_from))
 
-                if fallback:
-                    return lambda k : trans.get(k, falltrans.get(k, k))
-                else:
-                    return lambda k : trans.get(k, k)
+    else:
+        with open(ofname, "w") as f:
+            f.write("ruleset = {\n ")
+            f.write(pprint.pformat(ruleset, width=144)[1:]) # [1:] skips the opening {
+            f.write(textwrap.dedent("""
+                def get_trans(lang="{lang}", fallback = False):
+                    def find_lang(lname):
+                        for ess in ruleset["extraStrings"]:
+                            if ess['type'] == lname:
+                                return ess['strings']
+                        return {{}}
 
-            """.format(fblang = FALLBACK_LANG,
-                         lang = ruleset['_config']['options'].get('language', FALLBACK_LANG))))
-    print("\nwrote {}".format(ofname))
+                    trans = find_lang(lang)
+                    falltrans = find_lang("{fblang}")
 
-    pfname = ofname[:-3] + '.pickle'
-    pickle.dump(ruleset, open(pfname, "wb"))
-    print("wrote {}".format(pfname))
+                    if fallback:
+                        return lambda k : trans.get(k, falltrans.get(k, k))
+                    else:
+                        return lambda k : trans.get(k, k)
 
-    ofname = ofname[:-3] + '.msgp'
-    msgpack.pack(ruleset, open(ofname, "wb"))
-    print("wrote {}".format(ofname))
+                """.format(fblang = FALLBACK_LANG,
+                             lang = ruleset['_config']['options'].get('language', FALLBACK_LANG))))
+        print("\nwrote {}".format(ofname))
+
+    if pickled:
+        ofname = basename + '.pickle'
+        pickle.dump(ruleset, open(ofname, "wb"))
+        print("wrote {}".format(ofname))
+
+    if msgpacked:
+        ofname = basename + '.msgp'
+        msgpack.pack(ruleset, open(ofname, "wb"))
+        print("wrote {}".format(ofname))
 
 def main():
-    if len(sys.argv) == 1:
-        import ruleset
-        for_mapview(ruleset.ruleset)
+    pa = argparse.ArgumentParser(sys.argv[0])
+    pa.add_argument("root", nargs=1, help="oxc root or a ruleset.py")
+    pa.add_argument("--output", "-o", help="output filename for the entire ruleset, suffix is dropped.")
+    pa.add_argument("--force", "-f", action="store_true", help="force overwriting the python ruleset module, if the data was imported from it")
+    pa.add_argument("--pickle", "-p", action="store_true", help=" write pickled ruleset too")
+    pa.add_argument("--msgpack", "-m", action="store_true", help=" write msgpacked ruleset too")
+    pa.add_argument("--terrains", "-t", type=str, help="output fname for the terrain data in rust deser format")
+    args = vars(pa.parse_args())
+
+    root = args['root'][0]
+    if os.path.isdir(root):
+        print("modloading from {}".format(root))
+        ruleset = load_ruleset(root)
+        imported_from = None
     else:
-        indir = sys.argv[1]
-        ofname = 'ruleset.py' if len(sys.argv) < 3 else sys.argv[2]
-        ruleset = load_ruleset(indir)
-        write_ruleset(ruleset, ofname)
+        spec = importlib.util.spec_from_file_location("ruleset", root)
+        if spec is None:
+            print("Import from {} failed.".format(root))
+        else:
+            print("importing {}".format(root))
+        module = importlib.util.module_from_spec(spec) # python 3.5+, meaning trusty is out.
+        spec.loader.exec_module(module)
+        imported_from = module.__file__
+        ruleset = module.ruleset
+
+    if args['output'] is not None:
+        write_ruleset(ruleset, args['output'], imported_from,
+            force=args['force'], msgpacked=args['msgpack'], pickled=args['pickle'])
+
+    if args['terrains'] is not None:
+        write_rusted_terrains(ruleset, args['terrains'])
 
 if __name__ == '__main__':
     main()
