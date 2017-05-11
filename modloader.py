@@ -599,6 +599,10 @@ PRIMARY_KEYS = {
     'extraSounds': merge_extrasounds,
 
 # None means no merge; replace entirely
+    # as of 3.7a+90a09d5
+    'useCustomCategories': None,
+    'enableCloseQuartersCombat': None,
+    'closeQuartersAccuracyGlobal': None,
 
     # as of 3.7
     'bughuntRank': None,
@@ -1005,8 +1009,9 @@ def write_rusted_terrains(ruleset, ofname="terrains"):
         if es['type'] == 'SCANG.DAT':
             rv['scang'] = os.path.realpath(es['files'][0])
 
-    rv['palette'] = ruleset['_palettes']['PAL_BATTLESCAPE']
-    rv['palette']['file'] = os.path.realpath(rv['palette']['file'])
+    rv['palettes'] = copy.deepcopy(ruleset['_palettes'])
+    for pal in rv['palettes'].values():
+        pal['file'] = os.path.realpath(pal['file'])
 
     mcdp_map = {}
     for mcdp in sorted(ruleset['MCDPatches'], key = lambda i: i['_mod_index']):
