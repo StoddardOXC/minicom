@@ -6,6 +6,7 @@ import yaml, msgpack
 
 FALLBACK_LANG = 'en-US'
 TODO=False
+STRICT=True
 
 def yamload(path):
     return yaml.load(open(path, "rb"), Loader = yaml.CLoader)
@@ -265,6 +266,8 @@ class ModMeta(object):
             self.name = md["name"]
         except FileNotFoundError:
             print("no metadata for {}".format(path))
+            if STRICT:
+                raise
 
         self.finder = finder
         # expand extResDirs if any
@@ -434,6 +437,9 @@ def merge(mod_idx, primarykey, left, right, show_diff_for = []):
                 print("      del", item['delete'])
             except KeyError:
                 print("      del {}: missing".format(item['delete']))
+                if STRICT:
+                    raise
+
             deleted.append(item['delete'])
         else:
             try:
@@ -475,6 +481,8 @@ def expand_map_paths(mod, terradef):
                 "map": None,
                 "rmp": None})
             print(e)
+            if STRICT:
+                raise
     terradef["mapDataFiles"] = []
     for mds in terradef["mapDataSets"]:
         try:
@@ -490,6 +498,8 @@ def expand_map_paths(mod, terradef):
                 "pck": None,
                 "tab": None})
             print(e)
+            if STRICT:
+                raise
 
 def expand_paths(mod, rulename, rule):
     if rulename == 'globe':
@@ -505,7 +515,8 @@ def expand_paths(mod, rulename, rule):
                     try:
                         vidpaths.append(mod.findone(vp))
                     except FileNotFoundError:
-                        pass
+                        if STRICT:
+                            raise
                 scene['videos'] = vidpaths
             if 'slideshow' in scene:
                 for slide in scene['slideshow']['slides']:
@@ -984,14 +995,19 @@ def write_rusted_terrains(ruleset, ofname="terrains"):
                     groups = [mb['groups']]
             else:
                 groups = []
-
-            terrain['map_blocks'][name] = {
-                'name': name,
-                'length': mb['length'],
-                'width': mb['width'],
-                'groups': groups,
-                'map':  os.path.realpath(mapfiles[name]['map']),
-                'rmp': os.path.realpath(mapfiles[name]['rmp']) }
+            try:
+                terrain['map_blocks'][name] = {
+                    'name': name,
+                    'length': mb['length'],
+                    'width': mb['width'],
+                    'groups': groups,
+                    'map':  os.path.realpath(mapfiles[name]['map']),
+                    'rmp': os.path.realpath(mapfiles[name]['rmp']) }
+            except Exception as e:
+                print(e, name)
+                pprint.pprint(mapfiles[name])
+                if STRICT:
+                    raise
 
         terrain['map_data_sets'] = copy.deepcopy(terrain_def['mapDataFiles'])
         for mdf in terrain['map_data_sets']:
