@@ -1062,6 +1062,52 @@ def write_rusted_terrains(ruleset, ofname="terrains"):
     msgpack.pack(rv, open(ofname + ".msgp", "wb"))
     print("wrote", ofname + ".msgp")
 
+def write_rusted_translations(ruleset, ofname="translations", fallback_lang="en_US"):
+    """ writes out all the translations merged with the fallback_lang if it's not None """
+
+    fallback = {}
+    if fallback_lang is not None:
+        for ess in ruleset["extraStrings"]:
+            if ess['type'] == fallback_lang:
+                fallback = ess['strings']
+    rv = {}
+    for ess in ruleset["extraStrings"]:
+        rv[ess['type']] = copy.copy(fallback)
+        rv[ess['type']].update(ess['strings'])
+
+    with open(ofname + ".py", "w") as f:
+        f.write("translations = {\n")
+        f.write(pprint.pformat(rv, width=144)[1:])
+    print("wrote", ofname + ".py")
+
+    msgpack.pack(rv, open(ofname + ".msgp", "wb"))
+    print("wrote", ofname + ".msgp")
+
+def write_rusted_basescape(ruleset, ofname="basescape"):
+    """ Writes everything to make bases work. """
+    #hmm. seems like the terrain is hardcoded to... to something. XBASE but via missions I think
+    FACILITY = {
+
+    }
+    rv = {
+        'facilities': {},
+        'itemCategories': {},
+        'items': {},
+        'manufacture': {},
+        'research': {},
+        'ufopaedia': {},
+        'units': {},
+    }
+
+
+    with open(ofname + ".py", "w") as f:
+        f.write("basescape = {\n")
+        f.write(pprint.pformat(rv, width=144)[1:])
+    print("wrote", ofname + ".py")
+
+    msgpack.pack(rv, open(ofname + ".msgp", "wb"))
+    print("wrote", ofname + ".msgp")
+
 def write_ruleset(ruleset, ofname, imported_from=None, force=False, msgpacked=True, pickled=False):
     basename = ofname.rsplit('.', 1)[0]
     ofname = basename + ".py"
@@ -1114,6 +1160,7 @@ def main():
     pa.add_argument("--pickle", "-p", action="store_true", help=" write pickled ruleset too")
     pa.add_argument("--msgpack", "-m", action="store_true", help=" write msgpacked ruleset too")
     pa.add_argument("--terrains", "-t", type=str, help="output fname for the terrain data in rust deser format")
+    pa.add_argument("--lang", "-l", type=str, help="output fname for translations data in rust deser format")
     args = vars(pa.parse_args())
 
     root = args['root'][0]
@@ -1138,6 +1185,9 @@ def main():
 
     if args['terrains'] is not None:
         write_rusted_terrains(ruleset, args['terrains'])
+
+    if args['lang'] is not None:
+        write_rusted_translations(ruleset, args['lang'])
 
 if __name__ == '__main__':
     main()
