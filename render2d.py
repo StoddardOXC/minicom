@@ -10,6 +10,7 @@ import sdl2.rect
 import sdl2.blendmode
 import sdl2.pixels
 import sdl2.render
+
 import sdl2.sdlgfx
 import sdl2.sdlimage
 
@@ -20,6 +21,44 @@ def init():
 def fini():
     sdl2.sdlimage.IMG_Quit()
     sdl2.SDL_Quit()
+
+def pal2sdlpal(pal):
+    ColorsArrayType = sdl2.SDL_Color * 256
+    colors = ColorsArrayType()
+    i = 0
+    for col in pal:
+        colors[i].r = col[0]
+        colors[i].g = col[1]
+        colors[i].b = col[2]
+        colors[i].a = col[3]
+        i += 1
+
+    sdlpal = sdl2.SDL_AllocPalette(256)
+    sdl2.SDL_SetPaletteColors(sdlpal, colors, 0, 256)
+    return sdlpal
+
+def bufpal2palsurf(data, w, h, pal, colorkey = None):
+    if data is not None:
+        if type(data) is bytearray:
+            data_ptr = ctypes.create_string_buffer(bytes(data), len(data))
+        elif type(data) is bytes:
+            data_ptr = ctypes.create_string_buffer(bytes(data), len(data))
+        else:
+            raise WTF
+    else:
+        raise WTF
+    surf = sdl2.SDL_CreateRGBSurfaceFrom(data_ptr, w, h, 8, w, 0, 0, 0, 0)
+
+    pal_ptr = pal2sdlpal(pal)
+
+    sdl2.SDL_SetSurfacePalette(surf, pal_ptr)
+    if colorkey is not None:
+        sdl2.SDL_SetColorKey(colorkey, FIXME)
+    # pin all refs
+    surf.pal_ptr = pal_ptr
+    surf.data_ptr = data_ptr
+    surf.data_data = data
+    return surf
 
 def bufpal2surface(buf, w, h, pal):
     # and also buf might be shorter that w*h,
@@ -219,8 +258,10 @@ def loop(window, renderer, inputfoo, renderfoo, choke_ms = 100):
                         return
             elif event.type == sdl2.SDL_WINDOWEVENT:
                 if event.window.event == sdl2.SDL_WINDOWEVENT_RESIZED:
-                    sz = Size2(event.window.data1, event.window.data2)
-                    sdl2.SDL_GetWindowSize(window, ctypes.byref(w_w), ctypes.byref(w_h))
+                    pass
+                    #sz = Size2(event.window.data1, event.window.data2)
+                    #w_w, w_h = event.window.data1, event.window.data2
+                    #sdl2.SDL_GetWindowSize(window, ctypes.byref(w_w), ctypes.byref(w_h))
                 elif sdl2.SDL_WINDOWEVENT_CLOSE:
                     inputfoo()
                 else:
