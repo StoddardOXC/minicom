@@ -544,8 +544,8 @@ def main():
 
     w = 320
     h = 200
-    w = 1280
-    h = 768
+    w = 1600
+    h = 1200
     h = int(0.733 * w)
 
     trans = get_trans(ruleset, 'en-US')
@@ -590,7 +590,7 @@ def main():
         mzquads = [] # don't render mission zones
 
         render2d.draw_textris(win, ren, vtxlist, trilist, textures, plist, poilist, countrylabels, mzquads)
-        time.sleep(100500)
+        time.sleep(5)
     render2d.loop(win, ren, inputfoo, renderfoo)
     render2d.fini()
 
