@@ -545,6 +545,7 @@ def expand_paths(mod, rulename, rule):
             try:
                 expand_map_paths(mod, craft['battlescapeTerrainData'])
             except KeyError:
+                # ignore this, not all craft have terrain data, esp. in vanilla
                 print("     {} missing terrain data".format(craft['type']))
 
     elif rulename == 'extraSprites':
@@ -609,11 +610,25 @@ PRIMARY_KEYS = {
     'extraSprites': merge_extrasprites,
     'extraSounds': merge_extrasounds,
 
+# as of oxce+ 3.9c - quick hack - just overwrite everything
+    'theMostUselessOptionEver': None,
+    'theBiggestRipOffEver': None,
+    'noLOSAccuracyPenaltyGlobal': None,
+    'noLOSAccuracyPenaltyCursor': None,
+    'costHireScientist': None,
+    'costHireEngineer': None,
+    'psiUnlockResearch': None,
+    'customPalettes': None,
+
 # None means no merge; replace entirely
+    # as of 3.7a+?
+    'showDogfightDistanceInKm': None,
     # as of 3.7a+90a09d5
     'useCustomCategories': None,
     'enableCloseQuartersCombat': None,
     'closeQuartersAccuracyGlobal': None,
+    'closeQuartersEnergyCostGlobal': None,
+    'closeQuartersTuCostGlobal': None,
 
     # as of 3.7
     'bughuntRank': None,
