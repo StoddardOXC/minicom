@@ -1,12 +1,41 @@
 #!/usr/bin/env python3
 
-import math, pprint, sys, os, copy, fnmatch, textwrap, pickle, argparse
+import math, pprint, sys, os, copy, fnmatch, textwrap, pickle, argparse, traceback
 import importlib.util
 import yaml, msgpack
 
 FALLBACK_LANG = 'en-US'
 TODO=False
-STRICT=True
+
+
+class Strict(object):
+    def __init__(self, do_raise=True):
+        self._do_raise = do_raise
+        self.filename = '(none)'
+        self.section = '(none)'
+        self.errors = []
+
+    def do_raise(self, really):
+        self._do_raise = really
+
+    def set_context(self, filename, section):
+        self.filename = filename
+        self.section = section
+
+    def __call__(self, exc, msg):
+        self.errors.append({ 'filename': self.filename, 'section': self.section, 'msg': msg})
+        if self._do_raise:
+            print("!!!!! MERGE ERROR")
+            print(msg)
+            traceback.print_exc()
+            print("")
+            sys.stdout.flush()
+            raise SystemExit
+
+    def __str__(self):
+        return "\n".join("{filename}:{section}: {msg}".format(**i) for i in self.errors)
+
+STRICT = Strict()
 
 def yamload(path):
     return yaml.load(open(path, "rb"), Loader = yaml.CLoader)
@@ -264,10 +293,8 @@ class ModMeta(object):
             self.description = md["description"]
             self.version = md["version"]
             self.name = md["name"]
-        except FileNotFoundError:
-            print("no metadata for {}".format(path))
-            if STRICT:
-                raise
+        except FileNotFoundError as e:
+            STRICT(e, "no metadata for {}".format(path))
 
         self.finder = finder
         # expand extResDirs if any
@@ -435,18 +462,16 @@ def merge(mod_idx, primarykey, left, right, show_diff_for = []):
             try:
                 del left_dict[item['delete']]
                 print("      del", item['delete'])
-            except KeyError:
-                print("      del {}: missing".format(item['delete']))
-                if STRICT:
-                    raise
+            except KeyError as e:
+                STRICT(e, "      del {}: missing item".format(item['delete']))
 
             deleted.append(item['delete'])
         else:
             try:
                 itype = item[primarykey]
-            except KeyError:
-                print("item '{}' missing primarykey of '{}".format(item, primarykey))
-                raise
+            except KeyError as e:
+                STRICT(e, "missing primarykey of '{}' in\n{}".format(primarykey, item))
+                continue
             if itype in left_dict:
                 print("      mod", itype)
                 if itype in show_diff_for:
@@ -480,9 +505,8 @@ def expand_map_paths(mod, terradef):
                 "type": mb["name"],
                 "map": None,
                 "rmp": None})
-            print(e)
-            if STRICT:
-                raise
+            STRICT(e)
+
     terradef["mapDataFiles"] = []
     for mds in terradef["mapDataSets"]:
         try:
@@ -497,9 +521,7 @@ def expand_map_paths(mod, terradef):
                 "mcd": None,
                 "pck": None,
                 "tab": None})
-            print(e)
-            if STRICT:
-                raise
+            STRICT(e)
 
 def expand_paths(mod, rulename, rule):
     if rulename == 'globe':
@@ -514,9 +536,8 @@ def expand_paths(mod, rulename, rule):
                 for vp in scene['videos']:
                     try:
                         vidpaths.append(mod.findone(vp))
-                    except FileNotFoundError:
-                        if STRICT:
-                            raise
+                    except FileNotFoundError as e:
+                        STRICT(e)
                 scene['videos'] = vidpaths
             if 'slideshow' in scene:
                 for slide in scene['slideshow']['slides']:
@@ -724,6 +745,7 @@ def yamdirload_and_merge(mod, ruleset, rul_dir, suffix = '.rul', printdiff = Tru
                         ruleset[k] = None
                 #if printdiff:
                     #print("{}: merge '{}'".format(rulpath, k))
+                STRICT.set_context(rulpath, k)
                 ruleset[k] = merge(mod.index, PRIMARY_KEYS[k], ruleset[k], v)
         elif False:
             print("Ign", os.path.join(path, d))
@@ -1024,10 +1046,7 @@ def write_rusted_terrains(ruleset, ofname="terrains"):
                     'map':  os.path.realpath(mapfiles[name]['map']),
                     'rmp': os.path.realpath(mapfiles[name]['rmp']) }
             except Exception as e:
-                print(e, name)
-                pprint.pprint(mapfiles[name])
-                if STRICT:
-                    raise
+                STRICT(e, "{}\n{}\n".format(name, pprint.pformat(mapfiles[name])))
 
         terrain['map_data_sets'] = copy.deepcopy(terrain_def['mapDataFiles'])
         for mdf in terrain['map_data_sets']:
@@ -1181,12 +1200,20 @@ def main():
     pa.add_argument("--msgpack", "-m", action="store_true", help=" write msgpacked ruleset too")
     pa.add_argument("--terrains", "-t", type=str, help="output fname for the terrain data in rust deser format")
     pa.add_argument("--lang", "-l", type=str, help="output fname for translations data in rust deser format")
+    pa.add_argument("--strict", action="store_true", help="do not die on ruleset inconsistencies")
     args = vars(pa.parse_args())
+
+    STRICT.do_raise(args['strict'])
 
     root = args['root'][0]
     if os.path.isdir(root):
         print("modloading from {}".format(root))
-        ruleset = load_ruleset(root)
+        try:
+            ruleset = load_ruleset(root)
+        except Exception as e:
+            if e is not SystemExit:
+                print(STRICT)
+            raise
         imported_from = None
     else:
         spec = importlib.util.spec_from_file_location("ruleset", root)
@@ -1208,6 +1235,8 @@ def main():
 
     if args['lang'] is not None:
         write_rusted_translations(ruleset, args['lang'])
+
+    print(STRICT)
 
 if __name__ == '__main__':
     main()
