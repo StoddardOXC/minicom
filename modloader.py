@@ -610,6 +610,11 @@ PRIMARY_KEYS = {
     'extraSprites': merge_extrasprites,
     'extraSounds': merge_extrasounds,
 
+# as of oxce+ 3.10a
+    'startingDifficulty': None,
+    'showFullNameInAlienInventory': None,
+    'ai': merge_globe,
+
 # as of oxce+ 3.9c - quick hack - just overwrite everything
     'theMostUselessOptionEver': None,
     'theBiggestRipOffEver': None,
