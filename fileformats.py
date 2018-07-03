@@ -1,8 +1,12 @@
 """
-    XCOM1 custom file format loaders.
+    XCOM1/2 custom file format parsers.
 
+    By definition has nothing to do with SDL or other libs.
+
+    Loader functions return raw data only.
 """
-import struct, pprint
+
+import struct, pprint ,io
 import collections, copy
 from recordclass import recordclass
 
@@ -31,6 +35,45 @@ def load_palette(ruleset, palname):
         pal.append((r<<2, g<<2, b<<2, 255))
     return pal
 
+def load_all_pallettes(ruleset):
+    return dict((palname, load_palette(ruleset, palname)) for palname in ruleset['_palettes'].keys())
+
+def save_palette_txt(pal, fname):
+    with open(fname, "w") as f:
+        f.write("{:d}\n".format(len(pal)))
+        for entry in pal:
+            f.write("{:d},{:d},{:d}\n".format(*pal))
+
+def decode_spk(data):
+    """ https://www.ufopaedia.org/index.php/Image_Formats#SPK """
+    ret_data = bytearray(320*200)
+    posn = 0
+    with io.BytesIO(data) as f:
+        def get():
+            return struct.unpack("<H", f.read(2))[0]
+        while True:
+            a = get()
+            if a == 0xFFFF:
+                skip = get()*2
+                posn += skip
+            elif a == 0xFFFE:
+                count = get()*2
+                ret_data[posn:posn+count] = f.read(count)
+                posn += count
+            elif a == 0xFFFD:
+                break
+    return ret_data
+
+
+def decode_bdy(data):
+    """ https://www.ufopaedia.org/index.php/Image_Formats#BDY """
+    ret_data = bytearray(320*200)
+    posn = 0
+    rownum = 0
+    with io.BytesIO(data) as f:
+        pass
+    return ret_data
+
 def get_sprite_mergelist(ruleset, typestr):
     "bruteforce a mergelist wrt all mods there"
     ml = []
@@ -40,7 +83,6 @@ def get_sprite_mergelist(ruleset, typestr):
     ml.sort(key = lambda x: x['_mod_index'])
     return ml
 
-_texdump = []
 def load_texture_dat(texture_dat, subX, subY):
     """http://www.ufopaedia.org/index.php/TEXTURE.DAT
 
@@ -59,8 +101,10 @@ def load_texture_dat(texture_dat, subX, subY):
             i += 1
     return rv
 
-# fixme: wrong name
-def load_textures_img(imgfname, subX, subY, surf_load, surf_cut):
+def load_and_slice_textures(imgfname, subX, subY, surf_load, surf_cut):
+    """ loads an image with surf_load and slices it into textures
+        with surf_cut
+    """
     surf = surf_load(imgfname)
     w = surf.contents.w
     h = surf.contents.h
@@ -97,7 +141,7 @@ def load_geotextures(ruleset, surf_conv, surf_load, surf_cut):
         pprint.pprint(ml)
         if len(tpatch['files']) == 1 and 'subX' in tpatch:
             pprint.pprint(tpatch)
-            rv = load_textures_img(tpatch['files'][0], tpatch['subX'], tpatch['subY'], surf_load, surf_cut)
+            rv = load_and_slice_textures(tpatch['files'][0], tpatch['subX'], tpatch['subY'], surf_load, surf_cut)
         else:
             for tidx, tname in tpatch['files'].items():
                 print(tidx, tname)
