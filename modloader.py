@@ -631,6 +631,13 @@ PRIMARY_KEYS = {
     'extraSprites': merge_extrasprites,
     'extraSounds': merge_extrasounds,
 
+# as of oxce+ 4.0
+    'showAllCommendations': None,
+    'pediaReplaceCraftFuelWithRangeType': None,
+    'soldierTransformation': None,
+# as of oxce+ 3.10b
+    'extraNerdyPediaInfo': None,
+
 # as of oxce+ 3.10a
     'startingDifficulty': None,
     'showFullNameInAlienInventory': None,
@@ -1001,6 +1008,179 @@ def load(finder):
     ruleset['_config'] = finder.config
     return ruleset
 
+def after_load_checks(ruleset):
+    defined_items = set(item['type'] for item in ruleset['items'])
+    defined_items.update(item['type'] for item in ruleset['crafts'])
+    defined_items.update(item['type'] for item in ruleset['units'])
+    #defined_item_names = set(item['name'] for item in ruleset['items'])
+    defined_research = set(item['name'] for item in ruleset['research'])
+    defined_categories = set(item['type'] for item in ruleset['itemCategories'])
+    defined_basefunc = set()
+    for facility in ruleset['facilities']:
+        if 'provideBaseFunc' in facility:
+            defined_basefunc.update(facility['provideBaseFunc'])
+    defined_armors = set(item['type'] for item in ruleset['armors'])
+    defined_research_lookups = set()
+    defined_free_researches = set()
+    for item in ruleset['research']:
+        gofp = set()
+        for k, v in item.get('getOneFreeProtected', {}).items():
+            gofp.update(set(v))
+        defined_free_researches.update(item.get('getOneFree', ()), gofp, item.get('sequentialGetOneFree', ()))
+        if 'lookup' in item:
+            defined_research_lookups.add(item['lookup'])
+
+    for item in ruleset['research']:
+        if 'lookup' in item:
+            defined_research_lookups.add(item['lookup'])
+
+    defined_mission_unlocked_researches = set()
+    for item in ruleset['alienDeployments']:
+        if 'unlockedResearch' in item:
+            defined_mission_unlocked_researches.add(item['unlockedResearch'])
+
+    def get_mod_name(item):
+        return ruleset['_mod_meta'][item['_mod_index']]['id']
+
+    def manufacture():
+        STRICT.set_context('after_load_checks', 'manufacture')
+        for item in ruleset['manufacture']:
+            item_name = item['name']
+            mod_name = get_mod_name(item)
+            reqd_research = set(item.get('requires', ()))
+            reqd_items = set(item.get('requiredItems', {}).keys())
+            reqd_basefunc = set(item.get('requiresBaseFunc', ()))
+            prod_items_counts = item.get('producedItems', { item['name']: 1 })
+            prod_items = set(prod_items_counts.keys())
+
+            # check we have everything needed
+
+            missing = reqd_research.difference(defined_research)
+            if len(missing) != 0:
+                STRICT(ConstraintViolation,
+                       "Required researchItem not defined for production {}/{}: {}".format(mod_name, item_name, str(missing)))
+
+            missing = reqd_items.difference(defined_items)
+            if len(missing) != 0:
+                STRICT(ConstraintViolation,
+                       "Required items not defined for production {}/{}: {}".format(mod_name, item_name, str(missing)))
+
+            missing = reqd_basefunc.difference(defined_basefunc)
+            if len(missing) != 0:
+                STRICT(ConstraintViolation,
+                       "Required base func not provided for production {}/{}: {}".format(mod_name, item_name, str(missing)))
+
+            missing = prod_items.difference(defined_items)
+            if len(missing) != 0:
+                STRICT(ConstraintViolation,
+                       "Produced items not defined for production {}/{}: {}".format(mod_name, item_name, str(missing)))
+
+            # check we're not producing more than one craft
+            if item['category'] == 'STR_CRAFT':
+                if prod_items_counts[item['name']] != 1:
+                    STRICT(ConstraintViolation,
+                        "Too many crafts built in production {}/{}".format(modname, item_name))
+
+    def research():
+        STRICT.set_context('after_load_checks', 'research')
+        for item in ruleset['research']:
+            item_name = item['name']
+            mod_name = get_mod_name(item)
+            dependencies = set(item.get('dependencies', ()))
+            unlocks = set(item.get('unlocks', ()))
+            disables = set(item.get('disables', ()))
+            requires = set(item.get('requires', ()))
+            getOneFree = set(item.get('getOneFree', ()))
+            getOneFreeProtected = set()
+            for k, v in item.get('getOneFreeProtected', {}).items():
+                getOneFreeProtected.add(k)
+                getOneFreeProtected.update(set(v))
+            reqd_basefunc = set(item.get('requiresBaseFunc', ()))
+            lookup = set((item['lookup'],)) if 'lookup' in item else set()
+            #= set(item[''])
+
+            # 1. lookup and item_name should be in ufopaedia
+            # 2. lookup is itself a research project
+            # 3. needItem=true means an item must be defined with the same name as the research topic
+            #    OR the research in question should be reachable by getOneFrees or a lookup
+            # 4. requires is a list of research topics
+            # 5. dependencies is a list of research topics
+            # 6. disables  is a list of research topics
+            # 7. getOneFree is a list of research topics
+            # 8. getOneFreeProtected is a map of lists of research topics keyed by research topics
+
+            reqd_research = requires.union(dependencies, unlocks, disables, requires, lookup,
+                                            getOneFree, getOneFreeProtected)
+            missing = reqd_research.difference(defined_research)
+            if len(missing) != 0:
+                STRICT(ConstraintViolation,
+                       "Referenced researchItem not defined for researchItem {}/{}: {}".format(mod_name, item_name, str(missing)))
+
+            missing = reqd_basefunc.difference(defined_basefunc)
+            if len(missing) != 0:
+                STRICT(ConstraintViolation,
+                       "Required base func not provided for researchItem {}/{}: {}".format(mod_name, item_name, str(missing)))
+
+            if not item.get('needItem', False):
+                continue
+            if item_name in defined_items:
+                continue
+            if item_name in defined_research_lookups:
+                continue
+            if item_name in defined_free_researches:
+                continue
+            if item_name in defined_mission_unlocked_researches: # successful mission sets this as finished, not unlocked
+                continue
+            STRICT(ConstraintViolation,
+                   "Unreachable researchItem: {}/{}: {}".format(mod_name, item_name, item_name))
+
+    def item():
+        STRICT.set_context('after_load_checks', 'item')
+        for item in ruleset['items']:
+            item_name = item['type'] # well, shit, item['name'] is also a thing as is nameAsAmmo
+            mod_name = get_mod_name(item)
+            reqd_research = set(item.get('requires', ()))
+            reqd_research.update(set(item.get('requiresBuy', ())))
+            reqd_basefunc = set(item.get('requiresBuyBaseFunc', ()))
+            categories = set(item.get('categories', ()))
+            ammo = set(item.get('compatibleAmmo', ()))
+
+            if item.get('fixedWeapon', False) and item_name not in defined_items:
+                STRICT(ConstraintViolation,
+                      "Required item/unit/craft not defined for fixedWeapon item: {}/{}: {}".format(mod_name, item_name, item_name))
+            missing = reqd_research.difference(defined_research)
+            if len(missing) != 0:
+                STRICT(ConstraintViolation,
+                       "Required researchItem not defined for {}/{}: {}".format(mod_name, item_name, str(missing)))
+
+            missing = reqd_basefunc.difference(defined_basefunc)
+            if len(missing) != 0:
+                STRICT(ConstraintViolation,
+                       "Required base func not provided for buying {}/{}: {}".format(mod_name, item_name, str(missing)))
+
+            missing = ammo.difference(defined_items)
+            if len(missing) != 0:
+                STRICT(ConstraintViolation,
+                       "Ammo items not defined for {}/{}: {}".format(mod_name, item_name, str(missing)))
+
+            missing = categories.difference(defined_categories)
+            if len(missing) != 0:
+                STRICT(ConstraintViolation,
+                       "Undefined item categories for {}/{}: {}".format(mod_name, item_name, str(missing)))
+
+    def unit():
+        STRICT.set_context('after_load_checks', 'unit')
+        for item in ruleset['units']:
+            item_name = item['type'] # well, shit, item['name'] is also a thing as is nameAsAmmo
+            mod_name = get_mod_name(item)
+            if item['armor'] not in defined_armors:
+                STRICT(ConstraintViolation,
+                       "Armor not defined for unit {}/{}: {}".format(mod_name, item_name, item['armor']))
+    manufacture()
+    research()
+    item()
+    unit()
+
 def load_ruleset(path):
     """ load the ruleset from a self-contained installation and return it """
     userdir = os.path.join(path, 'user')
@@ -1235,6 +1415,8 @@ def main():
 
     if args['lang'] is not None:
         write_rusted_translations(ruleset, args['lang'])
+
+    after_load_checks(ruleset)
 
     print(STRICT)
 
