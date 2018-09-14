@@ -631,6 +631,7 @@ PRIMARY_KEYS = {
     'extraSounds': merge_extrasounds,
 
 # as of oxce+ 4.0
+    'allowCountriesToCancelAlienPact': None,
     'showAllCommendations': None,
     'pediaReplaceCraftFuelWithRangeType': None,
     'soldierTransformation': None,
