@@ -7,7 +7,6 @@ import yaml, msgpack
 FALLBACK_LANG = 'en-US'
 TODO=False
 
-
 class Strict(object):
     def __init__(self, do_raise=True):
         self._do_raise = do_raise
@@ -505,7 +504,7 @@ def expand_map_paths(mod, terradef):
                 "type": mb["name"],
                 "map": None,
                 "rmp": None})
-            STRICT(e)
+            STRICT(e, "mapBlock {} missing something".format(mb["name"))
 
     terradef["mapDataFiles"] = []
     for mds in terradef["mapDataSets"]:
@@ -521,7 +520,7 @@ def expand_map_paths(mod, terradef):
                 "mcd": None,
                 "pck": None,
                 "tab": None})
-            STRICT(e)
+            STRICT(e, "mapBlock {} missing something".format(mb["name"))
 
 def expand_paths(mod, rulename, rule):
     if rulename == 'globe':
@@ -537,7 +536,7 @@ def expand_paths(mod, rulename, rule):
                     try:
                         vidpaths.append(mod.findone(vp))
                     except FileNotFoundError as e:
-                        STRICT(e)
+                        STRICT(e, vp)
                 scene['videos'] = vidpaths
             if 'slideshow' in scene:
                 for slide in scene['slideshow']['slides']:
