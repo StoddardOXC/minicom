@@ -1013,7 +1013,7 @@ def after_load_checks(ruleset):
     defined_items.update(item['type'] for item in ruleset['units'])
     #defined_item_names = set(item['name'] for item in ruleset['items'])
     defined_research = set(item['name'] for item in ruleset['research'])
-    defined_categories = set(item['type'] for item in ruleset['itemCategories'])
+    defined_categories = set(item['type'] for item in ruleset.get('itemCategories', {}))
     defined_basefunc = set()
     for facility in ruleset['facilities']:
         if 'provideBaseFunc' in facility:
