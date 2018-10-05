@@ -1,5 +1,35 @@
 #!/usr/bin/env python3
 
+"""
+https://raw.githubusercontent.com/StoddardOXC/minicom/master/modloader.py
+
+How to use this on windows.
+
+1. Install Python 3  from https://www.python.org/downloads/release/python-370/
+2. Install pip-Win from https://sites.google.com/site/pydatalog/python/pip-for-windows
+3. Install yaml and msgpack packages in pip-Win:
+    - open the properties of the python launcher in your main menu
+    - copy the python executable path
+    - run the pip-Win
+    - paste the python executable path into the "Python Interpreter field
+    - paste the "pip install pyyaml msgpack" into the "Command" field
+    - click "Run"
+4. Prepare a standalone openxcom installation with mods you want to check enabled.
+   - for example see how Piratez are distribued.
+   - original game resources must be in the subdirectories, not somewhere else.
+     copy them into UFO and TFTD subdirectories.
+   - test this by running openxcom, enabling the mods in options.
+   - if it then crashes at startup - no problem.
+5. Put this file alongside the openxcom executable.
+6. Right-click it and select 'Open with IDLE'. A text editor will open
+7. Press F5 (Run Module from the Run menu).
+   This will open a nice text window with the work progress and the results.
+8. Press F5 again to re-run when you changed something in the mod.
+
+Please note that this script expects the openxcom configuration (options.cfg) in the 'user/' dir.
+
+"""
+
 import math, pprint, sys, os, copy, fnmatch, textwrap, pickle, argparse, traceback
 import importlib.util
 import yaml, msgpack
@@ -55,7 +85,7 @@ class Finder(object):
         self.datadirs = []
         self.userdirs = []
         self.cfgdirs = []
-        if sys.platform.startswith('linux') or sys.plaform == 'freebsd':
+        if sys.platform.startswith('linux') or sys.platform == 'freebsd':
             # data dirs
             self.userdirs.append(os.path.join(os.environ["HOME"], ".local/share/openxcom"))
             xdg_datadirs = os.environ.get("XDG_DATA_DIRS", "").split(":")
@@ -79,7 +109,7 @@ class Finder(object):
             self.datadirs.append("/Users/Shared/OpenXcom/")
             self.homedirs.append(os.path.join(homedir, "Library/Application Support/OpenXcom"))
 
-        elif sys.plaform == 'win32':
+        elif sys.platform == 'win32':
             """ ctypes:
                     SHGetFolderPathA
                     PathAppendA
@@ -1374,7 +1404,7 @@ def write_ruleset(ruleset, ofname, imported_from=None, force=False, msgpacked=Tr
 
 def main():
     pa = argparse.ArgumentParser(sys.argv[0])
-    pa.add_argument("root", nargs=1, help="oxc root or a ruleset.py")
+    pa.add_argument("root", nargs='?', help="oxc root or a ruleset.py", default='.')
     pa.add_argument("--output", "-o", help="output filename for the entire ruleset, suffix is dropped.")
     pa.add_argument("--force", "-f", action="store_true", help="force overwriting the python ruleset module, if the data was imported from it")
     pa.add_argument("--pickle", "-p", action="store_true", help=" write pickled ruleset too")
