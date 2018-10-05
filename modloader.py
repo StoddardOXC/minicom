@@ -504,7 +504,7 @@ def expand_map_paths(mod, terradef):
                 "type": mb["name"],
                 "map": None,
                 "rmp": None})
-            STRICT(e, "mapBlock {} missing something".format(mb["name"))
+            STRICT(e, "mapBlock {} missing something".format(mb["name"]))
 
     terradef["mapDataFiles"] = []
     for mds in terradef["mapDataSets"]:
@@ -520,7 +520,7 @@ def expand_map_paths(mod, terradef):
                 "mcd": None,
                 "pck": None,
                 "tab": None})
-            STRICT(e, "mapBlock {} missing something".format(mb["name"))
+            STRICT(e, "mapBlock {} missing something".format(mb["name"]))
 
 def expand_paths(mod, rulename, rule):
     if rulename == 'globe':
@@ -629,7 +629,8 @@ PRIMARY_KEYS = {
     'extraStrings': merge_extrastrings,
     'extraSprites': merge_extrasprites,
     'extraSounds': merge_extrasounds,
-
+# as of oxce 5.1 + pypy3
+    'pythonPath': None,
 # as of oxce+ 4.0
     'allowCountriesToCancelAlienPact': None,
     'showAllCommendations': None,
