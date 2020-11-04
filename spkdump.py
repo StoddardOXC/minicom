@@ -17,7 +17,7 @@ import sdl2.dll
 import sdl2.rwops
 
 pnglite = sdl2.dll.DLL("SDL_pnglite", ["SDL_pnglite"], os.getenv("PYSDL2_DLL_PATH"))
-SDL_LoadPNG_RW = pnglite.bind_function("SDL_LoadPNG_RW", [POINTER(SDL_RWops), c_int, c_char_p], POINTER(SDL_Surface))
+SDL_LoadPNG_RW = pnglite.bind_function("SDL_LoadPNG_RW", [POINTER(SDL_RWops), c_int], POINTER(SDL_Surface))
 SDL_SavePNG_RW = pnglite.bind_function("SDL_SavePNG_RW", [POINTER(SDL_Surface), POINTER(SDL_RWops), c_int], c_int)
 
 def save_png(surf, fname):
